@@ -443,13 +443,87 @@ async function downloadCoverLetterDocx(letterText, company, role, profile) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const S = {
-  input: { width: "100%", background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "4px", color: "#c0b8d8", fontFamily: "system-ui, sans-serif", fontSize: "13px", padding: "9px 12px", outline: "none", boxSizing: "border-box" },
-  textarea: { width: "100%", background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "4px", color: "#c0b8d8", fontFamily: "Georgia, serif", fontSize: "13px", lineHeight: "1.7", padding: "12px", resize: "vertical", outline: "none", boxSizing: "border-box" },
-  btn: { background: "#4a4abf", color: "#e0e0ff", border: "none", borderRadius: "4px", padding: "10px 24px", fontSize: "13px", fontFamily: "system-ui, sans-serif", fontWeight: "600", cursor: "pointer" },
-  btnGhost: { background: "transparent", color: "#5a5870", border: "1px solid #2a2a3a", borderRadius: "4px", padding: "10px 18px", fontSize: "13px", fontFamily: "system-ui, sans-serif", cursor: "pointer" },
-  label: { display: "block", fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: "#5858a0", fontFamily: "system-ui, sans-serif", fontWeight: "600", marginBottom: "8px" },
-  section: { background: "rgba(255,255,255,0.02)", border: "1px solid #1e1e2e", borderRadius: "8px", padding: "24px", marginBottom: "20px" },
-  resultBox: { background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "20px", fontFamily: "Georgia, serif", fontSize: "14px", lineHeight: "1.8", color: "#b8b0d0", whiteSpace: "pre-wrap", wordBreak: "break-word" },
+  input: {
+    width: "100%",
+    background: "#1e2035",
+    border: "1px solid #3a3d5c",
+    borderRadius: "6px",
+    color: "#e8e4f8",
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontSize: "14px",
+    padding: "10px 14px",
+    outline: "none",
+    boxSizing: "border-box",
+    transition: "border-color 0.15s",
+  },
+  textarea: {
+    width: "100%",
+    background: "#1e2035",
+    border: "1px solid #3a3d5c",
+    borderRadius: "6px",
+    color: "#e8e4f8",
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontSize: "14px",
+    lineHeight: "1.75",
+    padding: "14px",
+    resize: "vertical",
+    outline: "none",
+    boxSizing: "border-box",
+    transition: "border-color 0.15s",
+  },
+  btn: {
+    background: "#4f6ef7",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "6px",
+    padding: "11px 26px",
+    fontSize: "14px",
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontWeight: "600",
+    cursor: "pointer",
+    transition: "background 0.15s, transform 0.1s",
+    letterSpacing: "0.2px",
+  },
+  btnGhost: {
+    background: "transparent",
+    color: "#a8a0c8",
+    border: "1px solid #3a3d5c",
+    borderRadius: "6px",
+    padding: "10px 18px",
+    fontSize: "13px",
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    cursor: "pointer",
+    transition: "border-color 0.15s, color 0.15s",
+  },
+  label: {
+    display: "block",
+    fontSize: "11px",
+    letterSpacing: "1.5px",
+    textTransform: "uppercase",
+    color: "#8880b8",
+    fontFamily: "'DM Sans', system-ui, sans-serif",
+    fontWeight: "600",
+    marginBottom: "8px",
+  },
+  section: {
+    background: "#181a2e",
+    border: "1px solid #2e3050",
+    borderRadius: "10px",
+    padding: "24px",
+    marginBottom: "20px",
+  },
+  resultBox: {
+    background: "#1a1c30",
+    border: "1px solid #2e3050",
+    borderRadius: "8px",
+    padding: "20px 24px",
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontSize: "14px",
+    lineHeight: "1.85",
+    color: "#d8d4f0",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
 };
 
 function Spinner({ size = 14 }) {
@@ -465,7 +539,7 @@ function JDInput({ jd, setJd }) {
   return (
     <div style={{ marginBottom: "24px" }}>
       <label style={S.label}>Job Description</label>
-      <textarea value={jd} onChange={e => setJd(e.target.value)} placeholder="Paste the full job description here…" rows={6} style={S.textarea} onFocus={e => e.target.style.borderColor = "#4a4abf"} onBlur={e => e.target.style.borderColor = "#2a2a3a"} />
+      <textarea value={jd} onChange={e => setJd(e.target.value)} placeholder="Paste the full job description here…" rows={6} style={S.textarea} onFocus={e => e.target.style.borderColor = "#4a4abf"} onBlur={e => e.target.style.borderColor = "#3a3d5c"} />
     </div>
   );
 }
@@ -477,11 +551,11 @@ function JDInput({ jd, setJd }) {
 function PrivacyGate({ onAccept }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: "20px" }}>
-      <div style={{ background: "#111228", border: "1px solid #2a2a3a", borderRadius: "12px", width: "100%", maxWidth: "540px", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
-        <div style={{ fontSize: "10px", letterSpacing: "3px", textTransform: "uppercase", color: "#4a4abf", fontFamily: "system-ui, sans-serif", fontWeight: "600", marginBottom: "12px" }}>Before You Begin</div>
-        <div style={{ fontSize: "22px", fontWeight: "700", color: "#c8c0e8", fontFamily: "system-ui, sans-serif", marginBottom: "20px", letterSpacing: "-0.5px" }}>CareerForge</div>
-        <div style={{ fontSize: "13px", color: "#6a6080", fontFamily: "system-ui, sans-serif", lineHeight: "1.8", marginBottom: "24px", whiteSpace: "pre-line" }}>{PRIVACY_NOTICE}</div>
-        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid #1e1e2e", borderRadius: "6px", padding: "12px 16px", marginBottom: "24px", fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#4a4860", lineHeight: "1.6" }}>
+      <div style={{ background: "#181a2e", border: "1px solid #2a2a3a", borderRadius: "12px", width: "100%", maxWidth: "540px", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
+        <div style={{ fontSize: "10px", letterSpacing: "3px", textTransform: "uppercase", color: "#4a4abf", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "12px" }}>Before You Begin</div>
+        <div style={{ fontSize: "22px", fontWeight: "700", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "20px", letterSpacing: "-0.5px" }}>CareerForge</div>
+        <div style={{ fontSize: "13px", color: "#a8a0c8", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.8", marginBottom: "24px", whiteSpace: "pre-line" }}>{PRIVACY_NOTICE}</div>
+        <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid #1e1e2e", borderRadius: "6px", padding: "12px 16px", marginBottom: "24px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "12px", color: "#8880b8", lineHeight: "1.6" }}>
           Job descriptions are stored in your browser's local storage for session continuity. You can disable this after signing in.{" "}
           <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#5a5abf", textDecoration: "none" }}>Anthropic Privacy Policy →</a>
         </div>
@@ -497,55 +571,98 @@ function PrivacyGate({ onAccept }) {
 
 function AnalysisModal({ score, rationale, gaps, onBuildResume, onResumeOnly, onCorrect, onNewJD }) {
   const verdict =
-    score >= 8 ? { label: "Strong Match", color: "#7adf8a", rec: "This role fits your profile well. Build tailored materials and move forward with confidence." } :
-    score >= 6 ? { label: "Qualified Match", color: "#c9a84c", rec: "Solid fit with addressable gaps. Review below, correct any misses, then build your materials." } :
-    score >= 4 ? { label: "Partial Match", color: "#e09050", rec: "Real gaps exist. Consider whether to invest full application effort — a source-of-truth resume may be the right call." } :
-                 { label: "Significant Gaps", color: "#df7a7a", rec: "This role may not be the best use of your time. If you still want to apply, a base resume is more appropriate than a tailored one." };
+    score >= 8 ? {
+      label: "Excellent Match! 🎯",
+      color: "#4ade80",
+      bg: "rgba(74,222,128,0.08)",
+      border: "rgba(74,222,128,0.25)",
+      rec: "This role was made for you. Your background aligns strongly with what they're looking for — let's build materials that make this a no-brainer hire.",
+      cta: "Build tailored resume + cover letter",
+    } :
+    score >= 6 ? {
+      label: "Strong Contender ✅",
+      color: "#fbbf24",
+      bg: "rgba(251,191,36,0.08)",
+      border: "rgba(251,191,36,0.25)",
+      rec: "You have the core experience this role needs. A few gaps to address, but nothing that should stop you — let's sharpen your materials and get you in the room.",
+      cta: "Build tailored resume + cover letter",
+    } :
+    score >= 4 ? {
+      label: "Possible Fit 🤔",
+      color: "#fb923c",
+      bg: "rgba(251,146,60,0.08)",
+      border: "rgba(251,146,60,0.25)",
+      rec: "There are real gaps here, but your background has transferable strengths. Consider whether a targeted approach is worth the investment — or correct any gaps the AI may have missed.",
+      cta: "Build tailored resume anyway",
+    } : {
+      label: "Tough Road Ahead 💪",
+      color: "#f87171",
+      bg: "rgba(248,113,113,0.08)",
+      border: "rgba(248,113,113,0.25)",
+      rec: "This role has significant gaps from your current profile — and that's okay. If you still want to apply, a clean base resume is your best move. Check if the AI missed anything before deciding.",
+      cta: "Apply with base resume",
+    };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#111228", border: `1px solid ${verdict.color}33`, borderRadius: "12px", width: "100%", maxWidth: "620px", maxHeight: "88vh", overflowY: "auto", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
+      <div style={{ background: "#181a2e", border: `1px solid ${verdict.border}`, borderRadius: "14px", width: "100%", maxWidth: "620px", maxHeight: "88vh", overflowY: "auto", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
 
         {/* Score */}
         <div style={{ textAlign: "center", marginBottom: "28px" }}>
-          <div style={{ fontSize: "72px", fontWeight: "700", lineHeight: 1, color: verdict.color, fontFamily: "system-ui, sans-serif" }}>{score}<span style={{ fontSize: "28px", color: "#3a3858" }}>/10</span></div>
-          <div style={{ fontSize: "16px", fontWeight: "600", color: verdict.color, fontFamily: "system-ui, sans-serif", marginTop: "8px" }}>{verdict.label}</div>
-          <div style={{ fontSize: "13px", color: "#7a7090", fontFamily: "system-ui, sans-serif", marginTop: "10px", lineHeight: "1.6", maxWidth: "460px", margin: "10px auto 0" }}>{verdict.rec}</div>
-          <div style={{ fontSize: "12px", color: "#4a4460", fontFamily: "system-ui, sans-serif", marginTop: "6px", fontStyle: "italic" }}>{rationale}</div>
+          <div style={{ fontSize: "80px", fontWeight: "800", lineHeight: 1, color: verdict.color, fontFamily: "'DM Sans', system-ui, sans-serif", letterSpacing: "-2px" }}>
+            {score}<span style={{ fontSize: "32px", color: "#6060a0", fontWeight: "400" }}>/10</span>
+          </div>
+          <div style={{ fontSize: "20px", fontWeight: "700", color: verdict.color, fontFamily: "'DM Sans', system-ui, sans-serif", marginTop: "10px" }}>
+            {verdict.label}
+          </div>
+          <div style={{ fontSize: "15px", color: "#c8c4e8", fontFamily: "'DM Sans', system-ui, sans-serif", marginTop: "12px", lineHeight: "1.65", maxWidth: "480px", margin: "12px auto 0" }}>
+            {verdict.rec}
+          </div>
+          <div style={{ fontSize: "13px", color: "#7870a0", fontFamily: "'DM Sans', system-ui, sans-serif", marginTop: "8px", fontStyle: "italic" }}>
+            {rationale}
+          </div>
         </div>
 
-        {/* Bias disclaimer */}
-        <div style={{ background: "rgba(74,74,191,0.05)", border: "1px solid rgba(74,74,191,0.15)", borderRadius: "6px", padding: "10px 14px", marginBottom: "20px", fontFamily: "system-ui, sans-serif", fontSize: "11px", color: "#4a4860", lineHeight: "1.5" }}>
-          Score reflects keyword and experience alignment only — not your actual qualifications or suitability. Your judgment supersedes this score. Gaps flagged below may be incorrect — use the correction flow if the AI has missed something.
+        {/* Bias note */}
+        <div style={{ background: "rgba(80,80,160,0.12)", border: "1px solid rgba(80,80,160,0.25)", borderRadius: "6px", padding: "10px 14px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "12px", color: "#9890c8", lineHeight: "1.55" }}>
+          Score reflects keyword and experience alignment — not your full potential. Your judgment supersedes this. If a gap looks wrong, correct it below and we'll re-score.
         </div>
 
         {/* Gaps */}
         {gaps.length > 0 && (
           <div style={{ marginBottom: "24px" }}>
-            <div style={{ ...S.label, marginBottom: "10px" }}>Gaps to Review ({gaps.length})</div>
+            <div style={{ fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", color: "#8880b8", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "12px" }}>
+              Gaps to Review ({gaps.length})
+            </div>
             {gaps.map((gap, i) => (
-              <div key={i} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid #1e1e2e", borderRadius: "6px", padding: "12px 16px", marginBottom: "8px" }}>
-                <div style={{ fontSize: "13px", fontWeight: "600", color: "#c0b0d8", fontFamily: "system-ui, sans-serif", marginBottom: "3px" }}>{gap.title}</div>
-                <div style={{ fontSize: "12px", color: "#5a5070", fontFamily: "system-ui, sans-serif", lineHeight: "1.6" }}>{gap.assessment}</div>
+              <div key={i} style={{ background: "#1e2035", border: "1px solid #2e3050", borderRadius: "8px", padding: "12px 16px", marginBottom: "8px" }}>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "4px" }}>{gap.title}</div>
+                <div style={{ fontSize: "13px", color: "#9890b8", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.6" }}>{gap.assessment}</div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Decision CTAs */}
-        <div style={{ ...S.label, marginBottom: "12px" }}>What would you like to do?</div>
+        {/* CTAs */}
+        <div style={{ fontSize: "11px", letterSpacing: "1.5px", textTransform: "uppercase", color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "12px" }}>
+          What would you like to do?
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <button onClick={onBuildResume} style={{ background: "#4a4abf", color: "#e0e0ff", border: "none", borderRadius: "6px", padding: "14px 20px", fontSize: "14px", fontWeight: "600", fontFamily: "system-ui, sans-serif", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Build tailored resume + cover letter</span>
-            <span style={{ fontSize: "12px", opacity: 0.7 }}>→ Resume tab</span>
+          <button onClick={onBuildResume} style={{ background: verdict.color === "#4ade80" ? "#2d7d46" : "#4f6ef7", color: "#ffffff", border: "none", borderRadius: "8px", padding: "15px 20px", fontSize: "15px", fontWeight: "600", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>{verdict.cta}</span>
+            <span style={{ fontSize: "13px", opacity: 0.8 }}>→ Resume tab</span>
           </button>
-          <button onClick={onResumeOnly} style={{ background: "rgba(180,140,255,0.08)", color: "#b090d8", border: "1px solid rgba(180,140,255,0.25)", borderRadius: "6px", padding: "14px 20px", fontSize: "13px", fontFamily: "system-ui, sans-serif", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={onResumeOnly} style={{ background: "rgba(160,140,220,0.12)", color: "#e8e4f8", border: "1px solid rgba(160,140,220,0.3)", borderRadius: "8px", padding: "13px 20px", fontSize: "13px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Apply with source-of-truth resume only</span>
-            <span style={{ fontSize: "12px", opacity: 0.6 }}>no tailoring needed</span>
+            <span style={{ fontSize: "12px", opacity: 0.6 }}>no tailoring</span>
           </button>
           <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-            <button onClick={onCorrect} style={{ background: "rgba(201,168,76,0.1)", color: "#c9a84c", border: "1px solid rgba(201,168,76,0.3)", borderRadius: "6px", padding: "11px 16px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer", flex: 1 }}>Correct a gap first</button>
-            <button onClick={onNewJD} style={{ background: "rgba(99,180,160,0.1)", color: "#6ab8a8", border: "1px solid rgba(99,180,160,0.3)", borderRadius: "6px", padding: "11px 16px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer", flex: 1 }}>Try a different JD</button>
+            <button onClick={onCorrect} style={{ background: "rgba(251,191,36,0.1)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.3)", borderRadius: "8px", padding: "11px 16px", fontSize: "13px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", flex: 1 }}>
+              Correct a gap → re-score
+            </button>
+            <button onClick={onNewJD} style={{ background: "rgba(74,222,128,0.08)", color: "#6ab8a8", border: "1px solid rgba(74,222,128,0.2)", borderRadius: "8px", padding: "11px 16px", fontSize: "13px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", flex: 1 }}>
+              Try a different role
+            </button>
           </div>
         </div>
       </div>
@@ -567,22 +684,22 @@ function GapCorrectionPanel({ gaps, corrections, onSave, onDone }) {
     onSave(updated);
   };
   return (
-    <div style={{ background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "24px", marginBottom: "24px" }}>
-      <div style={{ fontSize: "14px", fontWeight: "600", color: "#c0b8d8", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>Correct the Gaps</div>
-      <div style={{ fontSize: "12px", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "8px" }}>Flag any gap the AI got wrong and explain why. Corrections are saved to your profile and will prevent the same gap from appearing in future analyses.</div>
-      <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px", padding: "8px 12px", marginBottom: "16px", fontFamily: "system-ui, sans-serif", fontSize: "11px", color: "#8a7040", lineHeight: "1.5" }}>
+    <div style={{ background: "#1e2035", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "24px", marginBottom: "24px" }}>
+      <div style={{ fontSize: "14px", fontWeight: "600", color: "#e0dcf4", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "4px" }}>Correct the Gaps</div>
+      <div style={{ fontSize: "12px", color: "#8880b8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "8px" }}>Flag any gap the AI got wrong and explain why. Corrections are saved to your profile and will prevent the same gap from appearing in future analyses.</div>
+      <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px", padding: "8px 12px", marginBottom: "16px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "11px", color: "#8a7040", lineHeight: "1.5" }}>
         ✓ Saved corrections become part of your verified profile. The AI will treat them as facts and never re-flag them. You can view all active corrections in Settings.
       </div>
       {local.map((gap, i) => (
-        <div key={i} style={{ border: `1px solid ${gap.flagged ? "rgba(201,168,76,0.4)" : "#1e1e2e"}`, borderRadius: "6px", padding: "14px 16px", marginBottom: "10px", background: gap.flagged ? "rgba(201,168,76,0.04)" : "rgba(255,255,255,0.01)" }}>
+        <div key={i} style={{ border: `1px solid ${gap.flagged ? "rgba(201,168,76,0.4)" : "#2e3050"}`, borderRadius: "6px", padding: "14px 16px", marginBottom: "10px", background: gap.flagged ? "rgba(201,168,76,0.04)" : "rgba(255,255,255,0.01)" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-            <button onClick={() => toggle(i)} style={{ background: gap.flagged ? "#c9a84c" : "transparent", border: `1px solid ${gap.flagged ? "#c9a84c" : "#3a3858"}`, borderRadius: "3px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0, marginTop: "2px", fontSize: "11px", color: "#0f1117", display: "flex", alignItems: "center", justifyContent: "center" }}>{gap.flagged ? "✓" : ""}</button>
+            <button onClick={() => toggle(i)} style={{ background: gap.flagged ? "#c9a84c" : "transparent", border: `1px solid ${gap.flagged ? "#c9a84c" : "#6860a0"}`, borderRadius: "3px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0, marginTop: "2px", fontSize: "11px", color: "#0f1117", display: "flex", alignItems: "center", justifyContent: "center" }}>{gap.flagged ? "✓" : ""}</button>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "13px", fontWeight: "600", color: "#c0b0d8", fontFamily: "system-ui, sans-serif", marginBottom: "3px" }}>{gap.title}</div>
-              <div style={{ fontSize: "12px", color: "#4a4060", fontFamily: "system-ui, sans-serif", lineHeight: "1.5" }}>{gap.assessment}</div>
+              <div style={{ fontSize: "13px", fontWeight: "600", color: "#c0b0d8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "3px" }}>{gap.title}</div>
+              <div style={{ fontSize: "12px", color: "#4a4060", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.5" }}>{gap.assessment}</div>
               {gap.flagged && (
                 <div style={{ marginTop: "10px" }}>
-                  <div style={{ fontSize: "10px", letterSpacing: "1.5px", textTransform: "uppercase", color: "#8a7040", fontFamily: "system-ui, sans-serif", marginBottom: "6px" }}>Your Correction</div>
+                  <div style={{ fontSize: "10px", letterSpacing: "1.5px", textTransform: "uppercase", color: "#8a7040", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "6px" }}>Your Correction</div>
                   <textarea value={gap.userCorrection} onChange={e => update(i, e.target.value)} placeholder="e.g. I DO have LSSBB — Intel internal certification plus LinkedIn Learning." rows={3} style={{ ...S.textarea, border: "1px solid #c9a84c" }} />
                 </div>
               )}
@@ -591,7 +708,7 @@ function GapCorrectionPanel({ gaps, corrections, onSave, onDone }) {
         </div>
       ))}
       <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
-        <button onClick={handleSave} style={{ background: "#c9a84c", color: "#0f1117", border: "none", borderRadius: "4px", padding: "10px 24px", fontSize: "13px", fontFamily: "system-ui, sans-serif", fontWeight: "600", cursor: "pointer" }}>Save Corrections</button>
+        <button onClick={handleSave} style={{ background: "#c9a84c", color: "#0f1117", border: "none", borderRadius: "4px", padding: "10px 24px", fontSize: "13px", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", cursor: "pointer" }}>Save Corrections</button>
         <button onClick={onDone} style={S.btnGhost}>Done</button>
       </div>
     </div>
@@ -702,16 +819,16 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
       )}
       {reScoring && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#111228", border: "1px solid #2a2a3a", borderRadius: "10px", padding: "32px 40px", textAlign: "center", fontFamily: "system-ui, sans-serif" }}>
+          <div style={{ background: "#181a2e", border: "1px solid #2a2a3a", borderRadius: "10px", padding: "32px 40px", textAlign: "center", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
             <div style={{ marginBottom: "16px" }}><Spinner size={24} /></div>
-            <div style={{ fontSize: "16px", fontWeight: "600", color: "#c8c0e8", marginBottom: "8px" }}>Re-scoring with your corrections…</div>
-            <div style={{ fontSize: "13px", color: "#5a5070" }}>Applying your profile updates and recalculating fit</div>
+            <div style={{ fontSize: "16px", fontWeight: "600", color: "#e8e4f8", marginBottom: "8px" }}>Re-scoring with your corrections…</div>
+            <div style={{ fontSize: "13px", color: "#9890b8" }}>Applying your profile updates and recalculating fit</div>
           </div>
         </div>
       )}
       <JDInput jd={jd} setJd={setJd} />
       {Object.keys(corrections).length > 0 && (
-        <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "10px 14px", marginBottom: "16px", fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#8a7040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "10px 14px", marginBottom: "16px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "12px", color: "#8a7040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span>✓ {Object.keys(corrections).length} gap correction{Object.keys(corrections).length > 1?"s":""} saved to your profile — AI will not re-flag these</span>
           <button onClick={() => setShowCorrections(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px" }}>View / edit</button>
         </div>
@@ -719,7 +836,7 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
       <button onClick={run} disabled={!jd.trim() || loading || reScoring || apiLocked} style={{ ...S.btn, opacity: !jd.trim() || loading || reScoring || apiLocked ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
         {loading ? <><Spinner /> Analyzing…</> : reScoring ? <><Spinner /> Re-scoring…</> : "Analyze JD"}
       </button>
-      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px", wordBreak: "break-word" }}>{error}</div>}
+      {error && <div style={{ color: "#c06060", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", marginBottom: "16px", wordBreak: "break-word" }}>{error}</div>}
       {showCorrections && parsedGaps.length > 0 && <GapCorrectionPanel gaps={parsedGaps} corrections={corrections} onSave={handleSaveCorrections} onDone={() => setShowCorrections(false)} />}
       {showFull && fullResult && (
         <div style={S.section}>
@@ -743,6 +860,8 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
 
 function ResumeTab({ jd, setJd, resumeOnly, onDownloaded, profile }) {
   const [resume, setResume] = useState(profile.resumeText || "");
+  // Sync if profile changes (e.g. after upload gate completes)
+  useEffect(() => { if (profile.resumeText) setResume(profile.resumeText); }, [profile.resumeText]);
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -790,7 +909,7 @@ Give actual rewritten text, not just advice.`;
   return (
     <div>
       {resumeOnly && (
-        <div style={{ background: "rgba(180,140,255,0.08)", border: "1px solid rgba(180,140,255,0.2)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "system-ui, sans-serif", fontSize: "13px", color: "#b090d8" }}>
+        <div style={{ background: "rgba(180,140,255,0.08)", border: "1px solid rgba(180,140,255,0.2)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#b090d8" }}>
           Source-of-truth path — use your base resume as-is or make minimal edits. Tailoring optional.
         </div>
       )}
@@ -800,25 +919,25 @@ Give actual rewritten text, not just advice.`;
           <label style={{ ...S.label, margin: 0 }}>Resume Baseline</label>
           <button onClick={() => setShowResume(!showResume)} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>{showResume ? "Hide" : "Edit baseline"}</button>
         </div>
-        {showResume && <textarea value={resume} onChange={e => setResume(e.target.value)} rows={12} style={S.textarea} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#2a2a3a"} />}
+        {showResume && <textarea value={resume} onChange={e => setResume(e.target.value)} rows={12} style={S.textarea} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#3a3d5c"} />}
       </div>
       <button onClick={run} disabled={!jd.trim() || loading || apiLocked} style={{ ...S.btn, opacity: !jd.trim()||loading||apiLocked?0.5:1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
         {loading ? <><Spinner />Tailoring…</> : "Tailor Resume"}
       </button>
-      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
+      {error && <div style={{ color: "#c06060", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
       {result && (
         <div style={S.section}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ ...S.label, margin: 0 }}>Resume Tailoring Strategy</div>
             <div style={{ display: "flex", gap: "8px" }}>
               <CopyBtn text={result} />
-              <button onClick={handleDownload} disabled={downloading} style={{ ...S.btn, padding: "5px 14px", fontSize: "11px", background: downloading?"#2a2a3a":"#3a5abf", display: "flex", alignItems: "center", gap: "6px" }}>
+              <button onClick={handleDownload} disabled={downloading} style={{ ...S.btn, padding: "5px 14px", fontSize: "11px", background: downloading?"#3a3d5c":"#3a5abf", display: "flex", alignItems: "center", gap: "6px" }}>
                 {downloading?<><Spinner />Building resume…</>:"⬇ Build Final Resume .docx"}
               </button>
             </div>
           </div>
           <div style={S.resultBox}>{result}</div>
-          <div style={{ marginTop: "12px", fontSize: "11px", color: "#3a3848", fontFamily: "system-ui, sans-serif", fontStyle: "italic" }}>
+          <div style={{ marginTop: "12px", fontSize: "11px", color: "#6060a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontStyle: "italic" }}>
             The strategy above is for your review. Download runs a second AI pass to produce a clean, submission-ready resume incorporating these recommendations.
           </div>
         </div>
@@ -895,34 +1014,34 @@ CRITICAL FORMATTING RULES:
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
         <div>
           <label style={S.label}>Company Name {extracting && <span style={{ color: "#4a4abf", letterSpacing: 0, textTransform: "none", fontSize: "11px" }}>extracting…</span>}</label>
-          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Acme Corp" style={S.input} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#2a2a3a"} />
+          <input value={company} onChange={e => setCompany(e.target.value)} placeholder="e.g. Acme Corp" style={S.input} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#3a3d5c"} />
         </div>
         <div>
           <label style={S.label}>Role Title</label>
-          <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. VP of Technology" style={S.input} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#2a2a3a"} />
+          <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. VP of Technology" style={S.input} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#3a3d5c"} />
         </div>
       </div>
       <div style={{ marginBottom: "20px" }}>
-        <label style={S.label}>Additional Context <span style={{ color: "#3a3858", textTransform: "none", letterSpacing: 0 }}>optional</span></label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Referred by John Smith. Emphasize CCR governance work…" rows={3} style={S.textarea} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#2a2a3a"} />
+        <label style={S.label}>Additional Context <span style={{ color: "#6860a0", textTransform: "none", letterSpacing: 0 }}>optional</span></label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Referred by John Smith. Emphasize CCR governance work…" rows={3} style={S.textarea} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#3a3d5c"} />
       </div>
       <button onClick={run} disabled={!jd.trim()||loading||apiLocked} style={{ ...S.btn, opacity: !jd.trim()||loading||apiLocked?0.5:1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
         {loading?<><Spinner />Drafting…</>:"Draft Cover Letter"}
       </button>
-      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
+      {error && <div style={{ color: "#c06060", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
       {result && (
         <div style={S.section}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <div style={{ ...S.label, margin: 0 }}>Cover Letter Draft</div>
             <div style={{ display: "flex", gap: "8px" }}>
               <CopyBtn text={result} />
-              <button onClick={handleDownload} disabled={downloading} style={{ ...S.btn, padding: "5px 14px", fontSize: "11px", background: downloading?"#2a2a3a":"#3a5abf", display: "flex", alignItems: "center", gap: "6px" }}>
+              <button onClick={handleDownload} disabled={downloading} style={{ ...S.btn, padding: "5px 14px", fontSize: "11px", background: downloading?"#3a3d5c":"#3a5abf", display: "flex", alignItems: "center", gap: "6px" }}>
                 {downloading?<><Spinner />…</>:"⬇ Download .docx"}
               </button>
             </div>
           </div>
           <div style={S.resultBox}>{result}</div>
-          <div style={{ marginTop: "12px", fontSize: "11px", color: "#3a3848", fontFamily: "system-ui, sans-serif", fontStyle: "italic" }}>
+          <div style={{ marginTop: "12px", fontSize: "11px", color: "#6060a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontStyle: "italic" }}>
             Download includes AI attribution stamp and date. Review before sending.
           </div>
         </div>
@@ -972,14 +1091,14 @@ Be specific to Scott's background. No generic advice.`;
         <label style={S.label}>Interview Round</label>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           {["screening","hiring manager","panel","executive","final"].map(r => (
-            <button key={r} onClick={() => setRound(r)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", textTransform: "capitalize", background: round===r?"rgba(99,140,255,0.15)":"transparent", color: round===r?"#8aacff":"#5a5870", borderColor: round===r?"#4a6abf":"#2a2a3a" }}>{r}</button>
+            <button key={r} onClick={() => setRound(r)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", textTransform: "capitalize", background: round===r?"rgba(99,140,255,0.15)":"transparent", color: round===r?"#8aacff":"#5a5870", borderColor: round===r?"#4a6abf":"#3a3d5c" }}>{r}</button>
           ))}
         </div>
       </div>
       <button onClick={run} disabled={!jd.trim()||loading||apiLocked} style={{ ...S.btn, opacity: !jd.trim()||loading||apiLocked?0.5:1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
         {loading?<><Spinner />Preparing…</>:`Prep for ${round} interview`}
       </button>
-      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
+      {error && <div style={{ color: "#c06060", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
       {result && (
         <div style={S.section}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -1055,14 +1174,14 @@ function ResearchTab({ company, triggered }) {
     return (
       <div style={{ ...S.section, marginBottom: "16px" }}>
         <div style={{ ...S.label, color: "#5858a0", marginBottom: "12px" }}>{step.label}</div>
-        <div style={{ fontSize: "14px", lineHeight: "1.8", fontFamily: "Georgia, serif", color: steps[step.key]==="error"?"#c06060":"#b0a8c8", marginBottom: src.length?"12px":0 }}>{body}</div>
+        <div style={{ fontSize: "14px", lineHeight: "1.8", fontFamily: "Georgia, serif", color: steps[step.key]==="error"?"#c06060":"#d0ccee", marginBottom: src.length?"12px":0 }}>{body}</div>
         {src.length > 0 && (
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", paddingTop: "10px", borderTop: "1px solid #1a1a2a" }}>
-            <span style={{ fontSize: "10px", color: "#3a3858", fontFamily: "system-ui, sans-serif", letterSpacing: "1px", textTransform: "uppercase", alignSelf: "center" }}>Sources</span>
+            <span style={{ fontSize: "10px", color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", letterSpacing: "1px", textTransform: "uppercase", alignSelf: "center" }}>Sources</span>
             {src.map((url, i) => {
               let host = url;
               try { host = new URL(url).hostname.replace("www.", ""); } catch {}
-              return <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#4a4abf", fontFamily: "system-ui, sans-serif", textDecoration: "none", background: "rgba(74,74,191,0.08)", padding: "2px 8px", borderRadius: "3px", border: "1px solid rgba(74,74,191,0.2)" }}>{host} ↗</a>;
+              return <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#4a4abf", fontFamily: "'DM Sans', system-ui, sans-serif", textDecoration: "none", background: "rgba(74,74,191,0.08)", padding: "2px 8px", borderRadius: "3px", border: "1px solid rgba(74,74,191,0.2)" }}>{host} ↗</a>;
             })}
           </div>
         )}
@@ -1073,15 +1192,15 @@ function ResearchTab({ company, triggered }) {
   return (
     <div>
       {/* Safety scope note */}
-      <div style={{ background: "rgba(74,74,191,0.06)", border: "1px solid rgba(74,74,191,0.18)", borderRadius: "6px", padding: "10px 14px", marginBottom: "20px", fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#5858a0", lineHeight: "1.6" }}>
+      <div style={{ background: "rgba(74,74,191,0.06)", border: "1px solid rgba(74,74,191,0.18)", borderRadius: "6px", padding: "10px 14px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "12px", color: "#5858a0", lineHeight: "1.6" }}>
         <strong style={{ color: "#6868b0" }}>Scope:</strong> Only company name is used in search queries — no personal information or resume content is included. Results are AI-synthesized from public sources. Verify all claims before use in interviews.
       </div>
 
       {/* Confirm gate */}
       {confirmPending && !hasRun && (
         <div style={{ ...S.section, border: "1px solid rgba(201,168,76,0.3)", background: "rgba(201,168,76,0.04)", marginBottom: "20px" }}>
-          <div style={{ fontSize: "14px", fontWeight: "600", color: "#c9a84c", fontFamily: "system-ui, sans-serif", marginBottom: "8px" }}>Ready to research: {effective}</div>
-          <div style={{ fontSize: "13px", color: "#6a6040", fontFamily: "system-ui, sans-serif", lineHeight: "1.6", marginBottom: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: "600", color: "#c9a84c", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "8px" }}>Ready to research: {effective}</div>
+          <div style={{ fontSize: "13px", color: "#6a6040", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.6", marginBottom: "16px" }}>
             The agent will run {RESEARCH_STEPS.length} web searches: overview, leadership, financials, and transformation initiatives. Each result will be sourced and cited.
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -1095,7 +1214,7 @@ function ResearchTab({ company, triggered }) {
       <div style={{ marginBottom: "24px" }}>
         <label style={S.label}>Company {company && !override && <span style={{ color: "#4a4abf", letterSpacing: 0, textTransform: "none", fontSize: "11px" }}>from JD: {company}</span>}</label>
         <div style={{ display: "flex", gap: "10px" }}>
-          <input value={override} onChange={e => setOverride(e.target.value)} placeholder={company || "Enter company name…"} style={{ ...S.input, flex: 1 }} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#2a2a3a"} />
+          <input value={override} onChange={e => setOverride(e.target.value)} placeholder={company || "Enter company name…"} style={{ ...S.input, flex: 1 }} onFocus={e => e.target.style.borderColor="#4a4abf"} onBlur={e => e.target.style.borderColor="#3a3d5c"} />
           <button onClick={() => { setResults({}); setSteps({}); setHasRun(false); setConfirmPending(false); setTimeout(runAll, 50); }} disabled={!effective||anyLoading||apiLocked} style={{ ...S.btn, opacity: !effective||anyLoading||apiLocked?0.5:1, display: "flex", alignItems: "center", gap: "8px", whiteSpace: "nowrap" }}>
             {anyLoading?<><Spinner />Researching…</>:hasRun?"Re-run":"Run Research"}
           </button>
@@ -1108,11 +1227,11 @@ function ResearchTab({ company, triggered }) {
           <div style={{ ...S.label, marginBottom: "10px" }}>Agent Steps</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {RESEARCH_STEPS.map(step => (
-              <div key={step.key} style={{ display: "flex", alignItems: "center", gap: "10px", fontFamily: "system-ui, sans-serif", fontSize: "12px" }}>
-                <span style={{ width: "16px", textAlign: "center", flexShrink: 0, color: steps[step.key]==="done"?"#7adf8a":steps[step.key]==="error"?"#df7a7a":steps[step.key]==="loading"?"#c9a84c":"#3a3858" }}>
+              <div key={step.key} style={{ display: "flex", alignItems: "center", gap: "10px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "12px" }}>
+                <span style={{ width: "16px", textAlign: "center", flexShrink: 0, color: steps[step.key]==="done"?"#7adf8a":steps[step.key]==="error"?"#df7a7a":steps[step.key]==="loading"?"#c9a84c":"#6860a0" }}>
                   {steps[step.key]==="loading"?<Spinner size={10}/>:steps[step.key]==="done"?"✓":steps[step.key]==="error"?"✗":"○"}
                 </span>
-                <span style={{ color: steps[step.key]==="done"?"#8888b8":"#3a3858" }}>{step.label}</span>
+                <span style={{ color: steps[step.key]==="done"?"#8888b8":"#6860a0" }}>{step.label}</span>
               </div>
             ))}
           </div>
@@ -1136,7 +1255,7 @@ function ResearchTab({ company, triggered }) {
       )}
 
       {!hasRun && !confirmPending && !effective && (
-        <div style={{ padding: "48px", textAlign: "center", border: "1px dashed #1e1e2e", borderRadius: "8px", color: "#3a3858", fontFamily: "system-ui, sans-serif", fontSize: "14px" }}>
+        <div style={{ padding: "48px", textAlign: "center", border: "1px dashed #1e1e2e", borderRadius: "8px", color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "14px" }}>
           Complete your application materials — research unlocks automatically.<br />
           Or enter a company name above to run research directly.
         </div>
@@ -1149,22 +1268,22 @@ function ResearchTab({ company, triggered }) {
 // LIBRARY TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Tag({ label, color="#2a2a3a", textColor="#8880a0" }) {
-  return <span style={{ background: color, color: textColor, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontFamily: "system-ui, sans-serif", whiteSpace: "nowrap" }}>{label}</span>;
+function Tag({ label, color="#3a3d5c", textColor="#8880a0" }) {
+  return <span style={{ background: color, color: textColor, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: "nowrap" }}>{label}</span>;
 }
 
 function CompBadge({ label, active, onClick }) {
-  return <button onClick={onClick} style={{ background: active?"rgba(99,140,255,0.18)":"rgba(255,255,255,0.03)", color: active?"#8aacff":"#5a5870", border: `1px solid ${active?"#4a6abf":"#2a2a3a"}`, borderRadius: "4px", padding: "5px 12px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer" }}>{label}</button>;
+  return <button onClick={onClick} style={{ background: active?"rgba(99,140,255,0.18)":"rgba(255,255,255,0.03)", color: active?"#8aacff":"#5a5870", border: `1px solid ${active?"#4a6abf":"#3a3d5c"}`, borderRadius: "4px", padding: "5px 12px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer" }}>{label}</button>;
 }
 
 function StoryCard({ story, onEdit, onDelete, onStar }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${story.starred?"rgba(99,140,255,0.3)":"#1e1e2e"}`, borderRadius: "8px", marginBottom: "12px", overflow: "hidden" }}>
+    <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${story.starred?"rgba(99,140,255,0.3)":"#2e3050"}`, borderRadius: "8px", marginBottom: "12px", overflow: "hidden" }}>
       <div onClick={() => setExpanded(!expanded)} style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: "12px", background: expanded?"rgba(99,140,255,0.04)":"transparent" }}>
         <button onClick={e => { e.stopPropagation(); onStar(story.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", padding: "0", marginTop: "1px", flexShrink: 0 }}>{story.starred?"⭐":"☆"}</button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "15px", fontWeight: "600", color: "#d8d0f0", fontFamily: "system-ui, sans-serif", marginBottom: "6px" }}>{story.title}</div>
+          <div style={{ fontSize: "15px", fontWeight: "600", color: "#d8d0f0", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "6px" }}>{story.title}</div>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
             <Tag label={story.company} color="rgba(99,140,255,0.12)" textColor="#7a9aef" />
             <Tag label={story.role} />
@@ -1177,11 +1296,11 @@ function StoryCard({ story, onEdit, onDelete, onStar }) {
         <div style={{ padding: "0 20px 20px 48px", borderTop: "1px solid #1a1a2a" }}>
           {[{l:"S — Situation",k:"situation",c:"#6b8080"},{l:"T — Task",k:"task",c:"#6b7a80"},{l:"A — Action",k:"action",c:"#6b6880"},{l:"R — Result",k:"result",c:"#7a8060"}].map(({l,k,c}) => (
             <div key={k} style={{ marginTop: "16px" }}>
-              <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: c, fontFamily: "system-ui, sans-serif", fontWeight: "600", marginBottom: "6px" }}>{l}</div>
+              <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: c, fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "6px" }}>{l}</div>
               <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#b0a8c0", fontFamily: "Georgia, serif" }}>{story[k]}</div>
             </div>
           ))}
-          {story.tags?.length > 0 && <div style={{ marginTop: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>{story.tags.map(t => <Tag key={t} label={`#${t}`} color="rgba(255,255,255,0.04)" textColor="#4a4860" />)}</div>}
+          {story.tags?.length > 0 && <div style={{ marginTop: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>{story.tags.map(t => <Tag key={t} label={`#${t}`} color="rgba(255,255,255,0.04)" textColor="#8880b8" />)}</div>}
           <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
             <button onClick={() => onEdit(story)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px" }}>✏️ Edit</button>
             <button onClick={() => onDelete(story.id)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", color: "#6a3a3a", borderColor: "#2e1e1e" }}>Delete</button>
@@ -1200,12 +1319,12 @@ function StoryEditor({ story, onSave, onCancel }) {
   const field = (key, label, multi=false, hint="") => (
     <div style={{ marginBottom: "18px" }}>
       <label style={{ ...S.label, color: "#6860a0" }}>{label}{hint&&<span style={{ color: "#3e3a50", marginLeft: "8px", letterSpacing: 0, textTransform: "none", fontSize: "11px" }}>{hint}</span>}</label>
-      {multi ? <textarea value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} rows={4} style={S.textarea} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#2a2a3a"} /> : <input type="text" value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} style={S.input} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#2a2a3a"} />}
+      {multi ? <textarea value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} rows={4} style={S.textarea} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} /> : <input type="text" value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} style={S.input} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />}
     </div>
   );
   return (
-    <div style={{ background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "28px" }}>
-      <div style={{ fontSize: "16px", fontWeight: "600", color: "#c0b8d8", fontFamily: "system-ui, sans-serif", marginBottom: "24px" }}>{story?"Edit Story":"Add New Story"}</div>
+    <div style={{ background: "#1e2035", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "28px" }}>
+      <div style={{ fontSize: "16px", fontWeight: "600", color: "#e0dcf4", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "24px" }}>{story?"Edit Story":"Add New Story"}</div>
       {field("title","Story Title")}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}><div>{field("company","Company")}</div><div>{field("role","Role / Title")}</div></div>
       <div style={{ marginBottom: "18px" }}>
@@ -1245,8 +1364,8 @@ function LibraryTab({ stories, setStories }) {
   return (
     <div>
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search stories…" style={{ ...S.input, width: "200px" }} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#2a2a3a"} />
-        <button onClick={()=>setFilterStarred(!filterStarred)} style={{ ...S.btnGhost, fontSize: "12px", background: filterStarred?"rgba(99,140,255,0.15)":"transparent", color: filterStarred?"#8aacff":"#4a4860", borderColor: filterStarred?"#4a6abf":"#2a2a3a" }}>⭐ Starred</button>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search stories…" style={{ ...S.input, width: "200px" }} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+        <button onClick={()=>setFilterStarred(!filterStarred)} style={{ ...S.btnGhost, fontSize: "12px", background: filterStarred?"rgba(99,140,255,0.15)":"transparent", color: filterStarred?"#8aacff":"#8880b8", borderColor: filterStarred?"#4a6abf":"#3a3d5c" }}>⭐ Starred</button>
         <button onClick={()=>setEditing("new")} style={{ ...S.btn, marginLeft: "auto", padding: "8px 18px" }}>+ Add Story</button>
       </div>
       <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "20px" }}>
@@ -1254,7 +1373,7 @@ function LibraryTab({ stories, setStories }) {
         {COMPETENCIES.map(c=><CompBadge key={c} label={c} active={filterComp===c} onClick={()=>setFilterComp(filterComp===c?null:c)} />)}
       </div>
       {filtered.length===0?(
-        <div style={{ color: "#3a3858", fontFamily: "system-ui, sans-serif", fontSize: "14px", padding: "40px", textAlign: "center", border: "1px dashed #1e1e2e", borderRadius: "8px" }}>
+        <div style={{ color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "14px", padding: "40px", textAlign: "center", border: "1px dashed #1e1e2e", borderRadius: "8px" }}>
           No stories match.{" "}<button onClick={()=>{setFilterComp(null);setFilterStarred(false);setSearch("");}} style={{ background: "none", border: "none", color: "#5a5aaf", cursor: "pointer", fontSize: "14px" }}>Clear filters</button>
         </div>
       ) : filtered.map(s=><StoryCard key={s.id} story={s} onEdit={setEditing} onDelete={handleDelete} onStar={handleStar} />)}
@@ -1276,20 +1395,20 @@ function ProfileSelector({ profiles, activeId, onSelect, onAdd }) {
         return (
           <button key={p.id} onClick={() => onSelect(p.id)} style={{
             background: isActive ? `${color}22` : "transparent",
-            border: `1px solid ${isActive ? color : "#2a2a3a"}`,
+            border: `1px solid ${isActive ? color : "#3a3d5c"}`,
             borderRadius: "20px", padding: "5px 14px",
-            fontSize: "12px", fontFamily: "system-ui, sans-serif",
+            fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif",
             cursor: "pointer",
-            color: isActive ? "#c8c0e8" : "#5a5870",
+            color: isActive ? "#e8e4f8" : "#5a5870",
             display: "flex", alignItems: "center", gap: "6px"
           }}>
-            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isActive ? color : "#3a3858", flexShrink: 0 }} />
+            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: isActive ? color : "#6860a0", flexShrink: 0 }} />
             {p.displayName}
             {!p.resumeUploaded && <span style={{ fontSize: "9px", color: "#6a5040" }}>no resume</span>}
           </button>
         );
       })}
-      <button onClick={onAdd} style={{ background: "transparent", border: "1px dashed #2a2a3a", borderRadius: "20px", padding: "5px 14px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer", color: "#3a3858" }}>
+      <button onClick={onAdd} style={{ background: "transparent", border: "1px dashed #2a2a3a", borderRadius: "20px", padding: "5px 14px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", color: "#6860a0" }}>
         + Add Profile
       </button>
     </div>
@@ -1349,10 +1468,10 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
 
   return (
     <div style={{ maxWidth: "600px" }}>
-      <div style={{ fontSize: "18px", fontWeight: "600", color: "#c8c0e8", fontFamily: "system-ui, sans-serif", marginBottom: "6px" }}>
+      <div style={{ fontSize: "18px", fontWeight: "600", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "6px" }}>
         Set up {profile.displayName}'s profile
       </div>
-      <div style={{ fontSize: "13px", color: "#5a5070", fontFamily: "system-ui, sans-serif", lineHeight: "1.6", marginBottom: "28px" }}>
+      <div style={{ fontSize: "13px", color: "#9890b8", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.6", marginBottom: "28px" }}>
         Upload or paste your resume. CareerForge will extract your contact info and use your resume as the baseline for tailoring. Your data stays in your browser.
       </div>
 
@@ -1373,8 +1492,8 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
         <input id={`upload-${profile.id}`} type="file" accept=".docx,.txt" style={{ display: "none" }} onChange={handleFile} />
         <div style={{ fontSize: "24px", marginBottom: "8px" }}>📄</div>
         {fileName
-          ? <div style={{ color: "#4a4abf", fontFamily: "system-ui, sans-serif", fontSize: "14px" }}>✓ {fileName}</div>
-          : <div style={{ color: "#5a5070", fontFamily: "system-ui, sans-serif", fontSize: "13px" }}>Drop DOCX here, or click to browse<br /><span style={{ fontSize: "11px", color: "#3a3848" }}>or paste text below</span></div>
+          ? <div style={{ color: "#4a4abf", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "14px" }}>✓ {fileName}</div>
+          : <div style={{ color: "#9890b8", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px" }}>Drop DOCX here, or click to browse<br /><span style={{ fontSize: "11px", color: "#6060a0" }}>or paste text below</span></div>
         }
       </div>
 
@@ -1385,16 +1504,16 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
         rows={8}
         style={{ ...S.textarea, marginBottom: "16px" }}
         onFocus={e => e.target.style.borderColor = "#4a4abf"}
-        onBlur={e => e.target.style.borderColor = "#2a2a3a"}
+        onBlur={e => e.target.style.borderColor = "#3a3d5c"}
       />
 
-      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
+      {error && <div style={{ color: "#c06060", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
 
       <div style={{ display: "flex", gap: "10px" }}>
         <button onClick={handleContinue} disabled={!text.trim() || extracting} style={{ ...S.btn, opacity: !text.trim() || extracting ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px" }}>
           {extracting ? <><Spinner />Extracting contact info…</> : "Set Up Profile"}
         </button>
-        <button onClick={onSkip} style={{ ...S.btnGhost, color: "#5a5070" }}>
+        <button onClick={onSkip} style={{ ...S.btnGhost, color: "#9890b8" }}>
           Skip for now
         </button>
       </div>
@@ -1415,7 +1534,7 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
     <div style={{ marginBottom: "16px" }}>
       <label style={S.label}>{label}</label>
       <input value={form[key] || ""} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} style={S.input}
-        onFocus={e => e.target.style.borderColor = "#4a4abf"} onBlur={e => e.target.style.borderColor = "#2a2a3a"} />
+        onFocus={e => e.target.style.borderColor = "#4a4abf"} onBlur={e => e.target.style.borderColor = "#3a3d5c"} />
     </div>
   );
 
@@ -1444,10 +1563,10 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
             <button onClick={() => { onUpdateProfile(form); setEditing(false); }} style={S.btn}>Save Changes</button>
           </>
         ) : (
-          <div style={{ fontFamily: "system-ui, sans-serif", fontSize: "13px", color: "#7a7090", lineHeight: "2" }}>
+          <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#7a7090", lineHeight: "2" }}>
             {[["Name", profile.name], ["Phone", profile.phone || "—"], ["Email", profile.email || "—"], ["Address", profile.address || "—"], ["LinkedIn", profile.linkedin || "—"], ["Website", profile.website || "—"]].map(([l, v]) => (
               <div key={l} style={{ display: "flex", gap: "16px" }}>
-                <span style={{ color: "#4a4860", width: "80px", flexShrink: 0 }}>{l}</span>
+                <span style={{ color: "#8880b8", width: "80px", flexShrink: 0 }}>{l}</span>
                 <span style={{ color: v === "—" ? "#2a2a38" : "#a0a0b8" }}>{v}</span>
               </div>
             ))}
@@ -1460,7 +1579,7 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
         <div style={{ ...S.label, marginBottom: "12px" }}>Resume Baseline</div>
         {profile.resumeUploaded ? (
           <>
-            <div style={{ fontSize: "12px", color: "#5a9a7a", fontFamily: "system-ui, sans-serif", marginBottom: "12px" }}>
+            <div style={{ fontSize: "12px", color: "#5a9a7a", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "12px" }}>
               ✓ Resume uploaded — {profile.resumeText?.length?.toLocaleString()} characters
             </div>
             <button onClick={() => setReupload(!reupload)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", marginBottom: reupload ? "16px" : 0 }}>
@@ -1468,7 +1587,7 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
             </button>
           </>
         ) : (
-          <div style={{ fontSize: "12px", color: "#8a6040", fontFamily: "system-ui, sans-serif", marginBottom: "16px" }}>
+          <div style={{ fontSize: "12px", color: "#8a6040", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "16px" }}>
             ⚠ No resume uploaded — contact info will use defaults and tailoring will use a generic baseline.
           </div>
         )}
@@ -1484,11 +1603,11 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
       {/* Preferences */}
       <div style={{ ...S.section, marginBottom: "24px" }}>
         <div style={{ ...S.label, marginBottom: "16px" }}>Preferences</div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", fontFamily: "system-ui, sans-serif", fontSize: "13px", color: "#7a7090" }}>
-          <button onClick={() => setSaveJD(!saveJD)} style={{ background: saveJD ? "rgba(74,74,191,0.2)" : "rgba(255,255,255,0.03)", border: `1px solid ${saveJD ? "#4a4abf" : "#2a2a3a"}`, borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer", color: saveJD ? "#8aacff" : "#5a5870" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#7a7090" }}>
+          <button onClick={() => setSaveJD(!saveJD)} style={{ background: saveJD ? "rgba(74,74,191,0.2)" : "rgba(255,255,255,0.03)", border: `1px solid ${saveJD ? "#4a4abf" : "#3a3d5c"}`, borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer", color: saveJD ? "#8aacff" : "#5a5870" }}>
             {saveJD ? "💾 JD saved across sessions" : "💾 JD not saved"}
           </button>
-          <span style={{ fontSize: "12px", color: "#3a3858" }}>Toggle to control whether your JD persists between sessions</span>
+          <span style={{ fontSize: "12px", color: "#6860a0" }}>Toggle to control whether your JD persists between sessions</span>
         </div>
       </div>
 
@@ -1499,15 +1618,15 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
             <div style={{ ...S.label, margin: 0 }}>Saved Profile Corrections ({Object.keys(corrections).length})</div>
             <button onClick={() => { if (window.confirm("Clear all corrections?")) onUpdateCorrections({}); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px", color: "#6a3a3a", borderColor: "#2e1e1e" }}>Clear all</button>
           </div>
-          <div style={{ fontSize: "12px", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "12px", lineHeight: "1.5" }}>
+          <div style={{ fontSize: "12px", color: "#8880b8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "12px", lineHeight: "1.5" }}>
             These corrections are injected into every JD analysis and override AI-generated gap assessments.
           </div>
           {Object.entries(corrections).map(([title, correction]) => (
             <div key={title} style={{ background: "rgba(201,168,76,0.04)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px", padding: "12px 14px", marginBottom: "8px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#c0b0a0", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>{title}</div>
-                  <div style={{ fontSize: "11px", color: "#7a6a50", fontFamily: "system-ui, sans-serif", lineHeight: "1.5" }}>{correction}</div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#c0b0a0", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "4px" }}>{title}</div>
+                  <div style={{ fontSize: "11px", color: "#7a6a50", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.5" }}>{correction}</div>
                 </div>
                 <button onClick={() => { const updated = { ...corrections }; delete updated[title]; onUpdateCorrections(updated); }} style={{ background: "none", border: "none", color: "#6a3a3a", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>✕</button>
               </div>
@@ -1521,7 +1640,7 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
         <div style={{ ...S.section, border: "1px solid #3a1a1a" }}>
           <div style={{ ...S.label, color: "#6a3a3a", marginBottom: "12px" }}>Danger Zone</div>
           <button onClick={() => { if (window.confirm(`Delete ${profile.displayName}'s profile? This cannot be undone.`)) onDeleteProfile(profile.id); }}
-            style={{ background: "rgba(180,60,60,0.1)", border: "1px solid #6a2a2a", color: "#c06060", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontFamily: "system-ui, sans-serif", cursor: "pointer" }}>
+            style={{ background: "rgba(180,60,60,0.1)", border: "1px solid #6a2a2a", color: "#c06060", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer" }}>
             Delete {profile.displayName}'s Profile
           </button>
         </div>
@@ -1665,28 +1784,28 @@ export default function CareerForge() {
   const [researchTriggered, setResearchTriggered] = useState(false);
 
   const tabConfig = [
-    { name: "Library",        unlocked: true },
-    { name: "Analyze JD",     unlocked: true },
-    { name: "Resume",         unlocked: proceeded || resumeOnly },
-    { name: "Cover Letter",   unlocked: resumeDownloaded && !resumeOnly },
-    { name: "Interview Prep", unlocked: materialsComplete },
-    { name: "Research",       unlocked: materialsComplete },
-    { name: "Settings",       unlocked: true },
+    { name: "Library",        status: "ready" },
+    { name: "Analyze JD",     status: "ready" },
+    { name: "Resume",         status: proceeded || resumeOnly ? "active" : "suggested" },
+    { name: "Cover Letter",   status: coverDownloaded ? "done" : resumeDownloaded ? "active" : "suggested" },
+    { name: "Interview Prep", status: materialsComplete ? "active" : "suggested" },
+    { name: "Research",       status: materialsComplete ? "active" : "suggested" },
+    { name: "Settings",       status: "ready" },
   ];
 
   const starredCount = stories.filter(s => s.starred).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0b14", color: "#d0c8e8", fontFamily: "Georgia, serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e8e4f8", fontFamily: "Georgia, 'Times New Roman', serif" }}>
       {!privacyAccepted && <PrivacyGate onAccept={() => { sessionStorage.setItem("cf:privacy","1"); setPrivacyAccepted(true); }} />}
 
       {/* Header */}
-      <div style={{ background: "linear-gradient(135deg, #0d0e1f 0%, #111228 100%)", borderBottom: "1px solid #1e1e2e", padding: "20px 40px" }}>
+      <div style={{ background: "linear-gradient(135deg, #131528 0%, #181a30 100%)", borderBottom: "1px solid #2e3050", padding: "20px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
-              <span style={{ fontSize: "22px", fontWeight: "700", color: "#c8c0e8", letterSpacing: "-0.5px" }}>CareerForge</span>
-              <span style={{ fontSize: "10px", letterSpacing: "3px", color: "#4a4abf", textTransform: "uppercase", fontFamily: "system-ui, sans-serif", fontWeight: "600" }}>Job Search Intelligence</span>
+              <span style={{ fontSize: "22px", fontWeight: "700", color: "#e8e4f8", letterSpacing: "-0.5px" }}>CareerForge</span>
+              <span style={{ fontSize: "10px", letterSpacing: "3px", color: "#4a4abf", textTransform: "uppercase", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600" }}>Job Search Intelligence</span>
             </div>
             <div style={{ marginTop: "10px" }}>
               <ProfileSelector
@@ -1698,34 +1817,39 @@ export default function CareerForge() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", fontFamily: "system-ui, sans-serif" }}>
-            {sessionCost > 0 && <span style={{ fontSize: "11px", color: "#4a4860" }}>~${sessionCost.toFixed(4)} session</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            {sessionCost > 0 && <span style={{ fontSize: "11px", color: "#8880b8" }}>~${sessionCost.toFixed(4)} session</span>}
             {apiLocked && <div style={{ fontSize: "11px", color: "#c9a84c", display: "flex", alignItems: "center", gap: "6px" }}><Spinner size={10} />AI running…</div>}
             {(proceeded || resumeOnly) && (
-              <button onClick={handleNewJD} style={{ background: "transparent", border: "1px solid #2a2a3a", color: "#4a4860", borderRadius: "4px", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}>↺ New Application</button>
+              <button onClick={handleNewJD} style={{ background: "transparent", border: "1px solid #2a2a3a", color: "#8880b8", borderRadius: "4px", padding: "5px 12px", fontSize: "11px", cursor: "pointer" }}>↺ New Application</button>
             )}
-            <span style={{ fontSize: "11px", color: "#3a3858" }}>{stories.length} stories · {starredCount} ⭐</span>
+            <span style={{ fontSize: "11px", color: "#6860a0" }}>{stories.length} stories · {starredCount} ⭐</span>
           </div>
         </div>
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: "4px", marginTop: "16px", flexWrap: "wrap" }}>
-          {tabConfig.map(({ name, unlocked }) => {
+          {tabConfig.map(({ name, status }) => {
             const isActive = activeTab === name;
             const done = (name === "Resume" && resumeDownloaded) || (name === "Cover Letter" && coverDownloaded);
             return (
-              <button key={name} onClick={() => unlocked && setActiveTab(name)} style={{
-                background: isActive ? "rgba(99,140,255,0.15)" : "transparent",
-                color: isActive ? "#8aacff" : unlocked ? "#4a4860" : "#2a2840",
-                border: `1px solid ${isActive ? "#4a6abf" : "transparent"}`,
-                borderBottom: isActive ? "1px solid #0a0b14" : "1px solid transparent",
+              <button key={name} onClick={() => setActiveTab(name)} style={{
+                background: isActive ? "rgba(120,160,255,0.18)" : "transparent",
+                color: isActive ? "#c8d8ff" : status === "suggested" ? "#5a5878" : "#a8a0c8",
+                border: `1px solid ${isActive ? "#6080df" : "transparent"}`,
+                borderBottom: isActive ? "1px solid #0f1117" : "1px solid transparent",
                 borderRadius: "4px 4px 0 0", padding: "7px 14px", fontSize: "12px",
-                fontFamily: "system-ui, sans-serif", cursor: unlocked ? "pointer" : "default",
-                marginBottom: isActive ? "-1px" : "0", display: "flex", alignItems: "center", gap: "4px"
+                fontFamily: "'DM Sans', system-ui, sans-serif",
+                cursor: "pointer",
+                marginBottom: isActive ? "-1px" : "0",
+                display: "flex", alignItems: "center", gap: "4px",
+                transition: "color 0.15s"
               }}>
                 {name}
-                {!unlocked && name !== "Settings" && <span style={{ fontSize: "9px", opacity: 0.4 }}>🔒</span>}
-                {done && <span style={{ fontSize: "9px", color: "#7adf8a" }}>✓</span>}
+                {done && <span style={{ fontSize: "9px", color: "#6adf9a" }}>✓</span>}
+                {status === "suggested" && !done && name !== "Library" && name !== "Settings" && (
+                  <span style={{ fontSize: "9px", color: "#4a4868", marginLeft: "1px" }}>·</span>
+                )}
                 {name === "Settings" && <span style={{ fontSize: "10px", opacity: 0.5 }}>⚙</span>}
               </button>
             );
@@ -1736,7 +1860,7 @@ export default function CareerForge() {
       {/* Content */}
       <div style={{ padding: "32px 40px", maxWidth: "900px" }}>
         {!loaded ? (
-          <div style={{ color: "#3a3858", fontFamily: "system-ui, sans-serif", display: "flex", alignItems: "center", gap: "10px" }}><Spinner />Loading…</div>
+          <div style={{ color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", display: "flex", alignItems: "center", gap: "10px" }}><Spinner />Loading…</div>
         ) : showUploadGate && activeTab !== "Settings" ? (
           <ResumeUploadGate
             profile={profile}
@@ -1747,7 +1871,7 @@ export default function CareerForge() {
           <>
             {/* No-resume warning banner */}
             {!profile.resumeUploaded && !showUploadGate && (activeTab === "Resume" || activeTab === "Cover Letter") && (
-              <div style={{ background: "rgba(180,120,40,0.1)", border: "1px solid rgba(180,120,40,0.3)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "system-ui, sans-serif", fontSize: "13px", color: "#b08040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ background: "rgba(180,120,40,0.1)", border: "1px solid rgba(180,120,40,0.3)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#b08040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span>⚠ No resume uploaded — outputs will use a generic baseline and may not have your contact info.</span>
                 <button onClick={() => setShowUploadGate(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}>Upload now</button>
               </div>
@@ -1763,16 +1887,16 @@ export default function CareerForge() {
                 onNewJD={handleNewJD}
               />
             )}
-            {activeTab === "Resume" && (proceeded || resumeOnly) && (
+            {activeTab === "Resume" && (
               <ResumeTab jd={jd} setJd={setJd} resumeOnly={resumeOnly} onDownloaded={() => setResumeDownloaded(true)} profile={profile} />
             )}
-            {activeTab === "Cover Letter" && resumeDownloaded && !resumeOnly && (
+            {activeTab === "Cover Letter" && (
               <CoverLetterTab jd={jd} setJd={setJd} onDownloaded={() => setCoverDownloaded(true)} profile={profile} />
             )}
-            {activeTab === "Interview Prep" && materialsComplete && (
+            {activeTab === "Interview Prep" && (
               <InterviewPrepTab jd={jd} setJd={setJd} stories={stories} profile={profile} />
             )}
-            {activeTab === "Research" && materialsComplete && (
+            {activeTab === "Research" && (
               <ResearchTab company={researchCompany} triggered={researchTriggered} />
             )}
             {activeTab === "Settings" && (

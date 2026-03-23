@@ -638,24 +638,31 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
   const [parsedCompany, setParsedCompany] = useState("");
   const [fullResult, setFullResult] = useState("");
   const [loading, setLoading] = useState(false);
+  const [reScoring, setReScoring] = useState(false);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [showFull, setShowFull] = useState(false);
   const apiLocked = useApiLock();
 
-  const run = async () => {
+  const runWithCorrections = async (activeCorrections) => {
     if (!jd.trim()) return;
+    const storyList = stories.map((s,i) => `${i+1}. "${s.title}" — ${s.competencies.join(", ")} | Result: ${s.result}`).join("\n");
+    const text = await callClaude(buildAnalysisSystem(activeCorrections, profile), `Stories:\n${storyList}\n\nJob Description:\n${jd}`, 3000);
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error("Could not parse analysis response");
+    const p = JSON.parse(m[0]);
+    setParsedScore(p.score); setParsedRationale(p.rationale);
+    setParsedGaps(p.gaps || []); setParsedCompany(p.company || "");
+    setFullResult(formatFull(p));
+    return p;
+  };
+
+  const run = async () => {
     setLoading(true); setError(null); setShowFull(false); setShowModal(false);
     try {
-      const storyList = stories.map((s,i) => `${i+1}. "${s.title}" — ${s.competencies.join(", ")} | Result: ${s.result}`).join("\n");
-      const text = await callClaude(buildAnalysisSystem(corrections, profile), `Stories:\n${storyList}\n\nJob Description:\n${jd}`, 3000);
-      const m = text.match(/\{[\s\S]*\}/);
-      if (!m) throw new Error("Could not parse analysis response");
-      const p = JSON.parse(m[0]);
-      setParsedScore(p.score); setParsedRationale(p.rationale);
-      setParsedGaps(p.gaps || []); setParsedCompany(p.company || "");
-      setFullResult(formatFull(p)); setShowModal(true);
+      await runWithCorrections(corrections);
+      setShowModal(true);
     } catch (e) { setError(`Analysis failed: ${e.message}`); }
     finally { setLoading(false); }
   };
@@ -669,7 +676,18 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
     `KEYWORDS: ${p.keywords?.join(", ")||""}`,
   ].join("\n");
 
-  const handleSaveCorrections = (nc) => { onSaveCorrections({ ...corrections, ...nc }); setShowCorrections(false); setShowModal(false); };
+  const handleSaveCorrections = async (nc) => {
+    const merged = { ...corrections, ...nc };
+    onSaveCorrections(merged);
+    setShowCorrections(false);
+    // Re-score with updated corrections
+    setReScoring(true);
+    try {
+      await runWithCorrections(merged);
+      setShowModal(true);
+    } catch (e) { setError(`Re-scoring failed: ${e.message}`); }
+    finally { setReScoring(false); }
+  };
 
   return (
     <div>
@@ -682,6 +700,15 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
           onNewJD={() => { setShowModal(false); onNewJD(); }}
         />
       )}
+      {reScoring && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#111228", border: "1px solid #2a2a3a", borderRadius: "10px", padding: "32px 40px", textAlign: "center", fontFamily: "system-ui, sans-serif" }}>
+            <div style={{ marginBottom: "16px" }}><Spinner size={24} /></div>
+            <div style={{ fontSize: "16px", fontWeight: "600", color: "#c8c0e8", marginBottom: "8px" }}>Re-scoring with your corrections…</div>
+            <div style={{ fontSize: "13px", color: "#5a5070" }}>Applying your profile updates and recalculating fit</div>
+          </div>
+        </div>
+      )}
       <JDInput jd={jd} setJd={setJd} />
       {Object.keys(corrections).length > 0 && (
         <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "10px 14px", marginBottom: "16px", fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#8a7040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -689,8 +716,8 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
           <button onClick={() => setShowCorrections(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px" }}>View / edit</button>
         </div>
       )}
-      <button onClick={run} disabled={!jd.trim() || loading || apiLocked} style={{ ...S.btn, opacity: !jd.trim() || loading || apiLocked ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
-        {loading ? <><Spinner /> Analyzing…</> : "Analyze JD"}
+      <button onClick={run} disabled={!jd.trim() || loading || reScoring || apiLocked} style={{ ...S.btn, opacity: !jd.trim() || loading || reScoring || apiLocked ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px" }}>
+        {loading ? <><Spinner /> Analyzing…</> : reScoring ? <><Spinner /> Re-scoring…</> : "Analyze JD"}
       </button>
       {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px", wordBreak: "break-word" }}>{error}</div>}
       {showCorrections && parsedGaps.length > 0 && <GapCorrectionPanel gaps={parsedGaps} corrections={corrections} onSave={handleSaveCorrections} onDone={() => setShowCorrections(false)} />}

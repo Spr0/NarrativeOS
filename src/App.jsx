@@ -6,13 +6,35 @@ const PROFILE = {
   name: "Scott Henderson",
   title: "Enterprise Transformation Leader",
   focus: "VP Technology | Renewable Energy | Enterprise Applications",
-  background: `Senior transformation leader with 15+ years driving enterprise-scale change at grid-scale renewable energy companies and Fortune 500 technology organizations. VP of Technology at EDF Renewables and Cypress Creek Renewables with full P&L ownership — budget, revenue forecasting, margin management, and board/C-suite reporting. Earlier career as enterprise agile coach at Nike and Intel. Known for translating complex technology strategy into measurable P&L outcomes. Located in Bellingham, WA.`,
+  background: `Senior transformation leader with 15+ years driving enterprise-scale change at grid-scale renewable energy companies and Fortune 500 technology organizations. VP of Technology at EDF Renewables and Cypress Creek Renewables with full P&L ownership — budget, revenue forecasting, margin management, and board/C-suite reporting. Earlier career as enterprise agile coach at Nike and Intel. Known for translating complex technology strategy into measurable P&L outcomes. Located in Bellingham, WA, open to remote roles.`,
   proofPoints: [
     "$28M annualized EBITDA improvement at EDF Renewables through platform consolidation",
     "27% reduction in compliance-related fines at CCR via AI governance implementation",
     "$13M SaaS catalog identified through ledger mining → 15% OPEX reduction",
     "Full P&L ownership at both CCR and EDF — budget, forecasting, margin, board reporting",
     "Enterprise agile coach at Nike and Intel — transformation at scale",
+    "Built Nike OIA/Airbag platform from whiteboard to production — ~$600M revenue in first year",
+  ],
+  // CONFIRMED facts. Gap analysis MUST cross-reference before declaring any gap.
+  // Never list something as a gap if it appears here.
+  confirmedSkills: [
+    "Lean Six Sigma Black Belt (LSSBB) — Intel internal certification",
+    "Lean Six Sigma Green Belt (LSSGB) — LinkedIn Learning certified",
+    "Lean Six Sigma Black Belt (LSSBB) — LinkedIn Learning certified",
+    "ERP implementation — led full NetSuite ERP implementation at CCR, on time and under budget",
+    "CRM — Salesforce and Sitetracker implementation at CCR",
+    "Platform implementations delivered on time/under budget: Oracle FCC, Blackline, NSPB/Planful, Snowflake (all at CCR)",
+    "IT product development — Nike OIA/Airbag platform, built whiteboard to production, ~$600M revenue Y1, still in use",
+    "OCM and factory adoption — post-deploy change management for Nike airbag platform",
+    "Process optimization using Lean/Six Sigma principles embedded across EDF and CCR transformation programs",
+    "Agile at scale — SAFe, Scrum, Kanban; enterprise agile coach at Nike and Intel",
+    "US Citizen — eligible for security clearance, no known impediments",
+    "Capital-intensive regulated industry: renewable energy (grid-scale), manufacturing (Nike/Intel)",
+    "Board and C-suite reporting — direct at both EDF and CCR",
+    "Full P&L ownership — multi-million dollar technology budgets at VP level",
+    "Vendor management — enterprise selection, contract negotiation, managed services",
+    "Data governance and compliance frameworks — AI governance at CCR",
+    "Team leadership — built/led teams of 15+ at CCR and EDF",
   ],
 };
 
@@ -251,50 +273,277 @@ function ResultSection({ title, result, loading, error }) {
   );
 }
 
+// ── Analysis Modal ────────────────────────────────────────────────────────────
+
+function parseAnalysis(text) {
+  // Extract fit score
+  const scoreMatch = text.match(/fit score[:\s]*([0-9.]+)\s*\/?\s*10/i) ||
+    text.match(/([0-9.]+)\s*\/\s*10/i) || text.match(/score[:\s]*([0-9.]+)/i);
+  const score = scoreMatch ? parseFloat(scoreMatch[1]) : null;
+
+  // Extract gaps section
+  const gapsMatch = text.match(/gaps?\s+to\s+address[\s\S]*?(?=\n#{1,3}|\n[A-Z]{3,}|\nKEYWORDS|$)/i) ||
+    text.match(/5\.\s*gaps?[\s\S]*?(?=\n6\.|\nKEYWORDS|$)/i);
+  const gapsRaw = gapsMatch ? gapsMatch[0] : "";
+
+  // Parse individual gaps from the gaps section
+  const gapLines = gapsRaw.split(/\n/).filter(l =>
+    l.trim() && !l.match(/^gaps?\s+to\s+address/i) && !l.match(/^5\.\s*gaps?/i)
+  );
+
+  const gaps = [];
+  let current = null;
+  for (const line of gapLines) {
+    const boldMatch = line.match(/^\*{1,2}([^*]+)\*{1,2}|^[-•]\s*\*{1,2}([^*]+)\*{1,2}|^\d+\.\s*\*{1,2}([^*]+)\*{1,2}/);
+    const headerMatch = line.match(/^\*{1,2}(No |Lack |Limited |Missing |Without )/i) ||
+      line.match(/^[-•]\s*(No |Lack |Limited |Missing |Without )/i);
+    if (boldMatch || headerMatch) {
+      if (current) gaps.push(current);
+      const title = (boldMatch?.[1] || boldMatch?.[2] || boldMatch?.[3] || line)
+        .replace(/\*+/g, "").replace(/^[-•\d.]\s*/, "").trim();
+      current = { title, detail: "" };
+    } else if (current && line.trim()) {
+      current.detail += (current.detail ? " " : "") + line.trim().replace(/\*+/g, "");
+    }
+  }
+  if (current) gaps.push(current);
+
+  return { score, gaps: gaps.filter(g => g.title.length > 2), fullText: text };
+}
+
+function AnalysisModal({ parsed, onProceed, onCorrectGaps, onNewJD, profileOverrides, onAddOverride }) {
+  const { score, gaps, fullText } = parsed;
+  const [correcting, setCorrecting] = useState(null); // gap index being corrected
+  const [correction, setCorrection] = useState("");
+
+  const scoreColor = score >= 8 ? "#7ab87a" : score >= 6 ? "#c9a84c" : "#c07070";
+
+  const handleSaveCorrection = (gap) => {
+    if (!correction.trim()) return;
+    onAddOverride({ gap: gap.title, correction: correction.trim(), timestamp: Date.now() });
+    setCorrecting(null);
+    setCorrection("");
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 1000, padding: "20px"
+    }}>
+      <div style={{
+        background: "#0f1020", border: "1px solid #2a2a4a", borderRadius: "10px",
+        maxWidth: "720px", width: "100%", maxHeight: "85vh", overflow: "auto",
+        padding: "32px", boxShadow: "0 20px 60px rgba(0,0,0,0.6)"
+      }}>
+        {/* Score */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: "16px", marginBottom: "24px" }}>
+          <div>
+            <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>Fit Score</div>
+            <div style={{ fontSize: "48px", fontWeight: "700", color: scoreColor, fontFamily: "system-ui, sans-serif", lineHeight: 1 }}>
+              {score ? `${score}/10` : "—"}
+            </div>
+          </div>
+          <div style={{ flex: 1, fontSize: "13px", color: "#7a7090", fontFamily: "system-ui, sans-serif", lineHeight: "1.6", paddingTop: "20px" }}>
+            {/* Extract rationale line */}
+            {fullText.match(/fit score[^.\n]*[.\n]/i)?.[0]?.replace(/fit score[:\s]*[0-9.]+\s*\/?\s*10\s*[-—]?\s*/i, "") || ""}
+          </div>
+        </div>
+
+        {/* Gaps */}
+        {gaps.length > 0 && (
+          <div style={{ marginBottom: "28px" }}>
+            <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: "#7a5050", fontFamily: "system-ui, sans-serif", fontWeight: "600", marginBottom: "14px" }}>
+              Gaps to Address ({gaps.length})
+            </div>
+            {gaps.map((gap, i) => {
+              const override = profileOverrides.find(o => o.gap === gap.title);
+              return (
+                <div key={i} style={{
+                  background: override ? "rgba(99,140,99,0.08)" : "rgba(180,80,80,0.07)",
+                  border: `1px solid ${override ? "rgba(99,140,99,0.2)" : "rgba(180,80,80,0.2)"}`,
+                  borderRadius: "6px", padding: "14px 16px", marginBottom: "10px"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "13px", fontWeight: "600", color: override ? "#7ab87a" : "#c08080", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>
+                        {override ? "✓ " : ""}{gap.title}
+                      </div>
+                      {gap.detail && (
+                        <div style={{ fontSize: "12px", color: "#5a5070", fontFamily: "system-ui, sans-serif", lineHeight: "1.6" }}>
+                          {gap.detail.slice(0, 180)}{gap.detail.length > 180 ? "…" : ""}
+                        </div>
+                      )}
+                      {override && (
+                        <div style={{ fontSize: "12px", color: "#7a9a7a", fontFamily: "system-ui, sans-serif", marginTop: "6px", fontStyle: "italic" }}>
+                          Your note: {override.correction}
+                        </div>
+                      )}
+                    </div>
+                    {!override && correcting !== i && (
+                      <button onClick={() => { setCorrecting(i); setCorrection(""); }} style={{
+                        ...S.btnGhost, fontSize: "11px", padding: "4px 10px",
+                        color: "#8870a0", borderColor: "#3a2a4a", flexShrink: 0
+                      }}>I have this</button>
+                    )}
+                  </div>
+                  {correcting === i && (
+                    <div style={{ marginTop: "12px" }}>
+                      <div style={{ fontSize: "11px", color: "#5a5070", fontFamily: "system-ui, sans-serif", marginBottom: "6px" }}>
+                        Describe your experience — this will be saved to your profile and used in future analyses:
+                      </div>
+                      <textarea
+                        value={correction}
+                        onChange={e => setCorrection(e.target.value)}
+                        autoFocus
+                        placeholder="e.g. I have LSSBB through Intel's internal program and LinkedIn Learning…"
+                        rows={3}
+                        style={{ ...S.textarea, fontSize: "12px", marginBottom: "8px" }}
+                        onFocus={e => e.target.style.borderColor = "#7a5aaf"}
+                        onBlur={e => e.target.style.borderColor = "#2a2a3a"}
+                      />
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={() => handleSaveCorrection(gap)} style={{ ...S.btn, padding: "6px 16px", fontSize: "12px", background: "#5a4aaf" }}>Save to Profile</button>
+                        <button onClick={() => setCorrecting(null)} style={{ ...S.btnGhost, padding: "6px 12px", fontSize: "12px" }}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Full analysis (collapsed) */}
+        <details style={{ marginBottom: "28px" }}>
+          <summary style={{ fontSize: "11px", letterSpacing: "1px", textTransform: "uppercase", color: "#3a3858", fontFamily: "system-ui, sans-serif", cursor: "pointer", userSelect: "none" }}>
+            Full Analysis ▾
+          </summary>
+          <div style={{ ...S.resultBox, marginTop: "12px", fontSize: "13px" }}>{fullText}</div>
+        </details>
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <button onClick={onProceed} style={{ ...S.btn, background: "#3a7a3a", flex: "1", minWidth: "140px" }}>
+            ✓ Proceed to Build
+          </button>
+          <button onClick={onCorrectGaps} style={{ ...S.btn, background: "#5a4aaf", flex: "1", minWidth: "140px" }}>
+            ✏️ Address Gaps
+          </button>
+          <button onClick={onNewJD} style={{ ...S.btnGhost, flex: "1", minWidth: "140px", textAlign: "center" }}>
+            ↺ New JD Analysis
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab: Analyze JD ───────────────────────────────────────────────────────────
 
-function AnalyzeTab({ jd, setJd, stories }) {
-  const [result, setResult] = useState("");
+function AnalyzeTab({ jd, setJd, stories, profileOverrides, onAddOverride, onProceedToBuild }) {
+  const [parsed, setParsed] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   const run = async () => {
     if (!jd.trim()) return;
-    setLoading(true); setError(null); setResult("");
+    setLoading(true); setError(null); setParsed(null);
     try {
-      const storyTitles = stories.map((s, i) => `${i + 1}. "${s.title}" — ${s.competencies.join(", ")}\n   Result: ${s.result}`).join("\n");
+      const storyTitles = stories.map((s, i) =>
+        `${i + 1}. "${s.title}" — ${s.competencies.join(", ")}\n   Result: ${s.result}`
+      ).join("\n");
+
+      const overrideContext = profileOverrides.length > 0
+        ? `\nUSER-CONFIRMED CORRECTIONS (treat as verified facts):\n${profileOverrides.map(o => `- ${o.gap}: ${o.correction}`).join("\n")}`
+        : "";
+
       const system = `You are a senior career strategist helping ${PROFILE.name}, ${PROFILE.title}.
+
 His background: ${PROFILE.background}
-His proof points: ${PROFILE.proofPoints.join("; ")}
+
+His confirmed skills and experience — YOU MUST CHECK THIS LIST before identifying any gap.
+If a skill appears in this list, it is NOT a gap. Do not list it as one under any circumstances:
+${PROFILE.confirmedSkills.map(s => `• ${s}`).join("\n")}
+${overrideContext}
+
+His proof points:
+${PROFILE.proofPoints.map(p => `• ${p}`).join("\n")}
 
 His STAR story library:
 ${storyTitles}
 
-Analyze job descriptions and provide:
-1. FIT SCORE (1-10) with a one-line rationale
-2. KEY REQUIREMENTS — the 5 most important things this role actually needs
-3. SCOTT'S STRONGEST ANGLES — his top 3 proof points most relevant to this JD, and why
-4. TOP 3 STORIES TO TELL — which stories from his library to lead with, and for which interview question type
-5. GAPS TO ADDRESS — any honest gaps between the JD and his background, with suggested framing
-6. KEYWORDS TO INCLUDE — 8-10 keywords from the JD to weave into resume and cover letter
+Analyze the job description and provide EXACTLY this structure:
 
-Be direct and specific. No generic advice.`;
+FIT SCORE: [number]/10 — [one-line rationale]
+
+KEY REQUIREMENTS
+[5 most important requirements this role actually needs]
+
+SCOTT'S STRONGEST ANGLES
+[Top 3 proof points most relevant to this JD, and why]
+
+TOP 3 STORIES TO TELL
+[Which stories to lead with, and for which interview question type]
+
+GAPS TO ADDRESS
+[IMPORTANT: Only list genuine gaps — skills or experience NOT found in his confirmed skills list above.
+For each real gap: name it clearly, give honest assessment, suggest framing.
+If there are no real gaps, say "No significant gaps identified."]
+
+KEYWORDS TO INCLUDE
+[8-10 keywords from the JD to weave into resume and cover letter]
+
+Be direct and specific. Never hallucinate gaps that contradict his confirmed skills list.`;
+
       const text = await callClaude(system, `Analyze this job description:\n\n${jd}`, 2500);
-      setResult(text);
+      const result = parseAnalysis(text);
+      setParsed(result);
+      setShowModal(true);
     } catch (e) { setError(`Analysis failed: ${e.message}`); }
     finally { setLoading(false); }
   };
 
+  const handleNewJD = () => { setJd(""); setParsed(null); setShowModal(false); };
+
   return (
     <div>
+      {showModal && parsed && (
+        <AnalysisModal
+          parsed={parsed}
+          profileOverrides={profileOverrides}
+          onAddOverride={onAddOverride}
+          onProceed={() => { setShowModal(false); onProceedToBuild(); }}
+          onCorrectGaps={() => setShowModal(false)}
+          onNewJD={handleNewJD}
+        />
+      )}
       <JDInput jd={jd} setJd={setJd} />
+      {profileOverrides.length > 0 && (
+        <div style={{
+          background: "rgba(99,140,99,0.08)", border: "1px solid rgba(99,140,99,0.2)",
+          borderRadius: "4px", padding: "10px 14px", marginBottom: "16px",
+          fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#7a9a7a"
+        }}>
+          ✓ {profileOverrides.length} profile correction{profileOverrides.length > 1 ? "s" : ""} active — AI will use these in analysis
+        </div>
+      )}
       <button onClick={run} disabled={!jd.trim() || loading} style={{
         ...S.btn, opacity: !jd.trim() || loading ? 0.5 : 1,
         display: "flex", alignItems: "center", gap: "8px", marginBottom: "24px"
       }}>
         {loading ? <><Spinner /> Analyzing…</> : "Analyze JD"}
       </button>
-      <ResultSection title="JD Analysis + Story Match" result={result} loading={loading} error={error} />
+      {error && <div style={{ color: "#c06060", fontFamily: "system-ui, sans-serif", fontSize: "13px", marginBottom: "16px", wordBreak: "break-word" }}>{error}</div>}
+      {parsed && !showModal && (
+        <div>
+          <button onClick={() => setShowModal(true)} style={{ ...S.btn, background: "#3a5aaf", marginBottom: "16px" }}>
+            View Analysis Results
+          </button>
+          <ResultSection title="Full Analysis" result={parsed.fullText} loading={false} error={null} />
+        </div>
+      )}
     </div>
   );
 }
@@ -723,19 +972,38 @@ function LibraryTab({ stories, setStories }) {
 export default function CareerForge() {
   const [activeTab, setActiveTab] = useState("Library");
   const [stories, setStories] = useState([]);
+  const [profileOverrides, setProfileOverrides] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [jd, setJd] = useState("");
 
   useEffect(() => {
-    Promise.all([storageGet("careerforge:scott:stories"), storageGet("careerforge:scott:jd")]).then(([s, j]) => {
+    Promise.all([
+      storageGet("careerforge:scott:stories"),
+      storageGet("careerforge:scott:jd"),
+      storageGet("careerforge:scott:overrides"),
+    ]).then(([s, j, o]) => {
       setStories(s || SEED_STORIES);
       setJd(j || "");
+      setProfileOverrides(o || []);
       setLoaded(true);
     });
   }, []);
 
   useEffect(() => { if (loaded) storageSet("careerforge:scott:stories", stories); }, [stories, loaded]);
   useEffect(() => { if (loaded) storageSet("careerforge:scott:jd", jd); }, [jd, loaded]);
+  useEffect(() => { if (loaded) storageSet("careerforge:scott:overrides", profileOverrides); }, [profileOverrides, loaded]);
+
+  const handleAddOverride = (override) => {
+    setProfileOverrides(prev => {
+      const existing = prev.findIndex(o => o.gap === override.gap);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = override;
+        return updated;
+      }
+      return [...prev, override];
+    });
+  };
 
   const starredCount = stories.filter(s => s.starred).length;
 
@@ -753,6 +1021,9 @@ export default function CareerForge() {
             </div>
             <div style={{ fontSize: "12px", color: "#3a3858", fontFamily: "system-ui, sans-serif", marginTop: "3px" }}>
               {PROFILE.name} · {PROFILE.title}
+              {profileOverrides.length > 0 && (
+                <span style={{ color: "#5a8a5a", marginLeft: "10px" }}>· {profileOverrides.length} profile correction{profileOverrides.length > 1 ? "s" : ""} active</span>
+              )}
             </div>
           </div>
           <div style={{ textAlign: "right", fontFamily: "system-ui, sans-serif" }}>
@@ -783,7 +1054,14 @@ export default function CareerForge() {
         ) : (
           <>
             {activeTab === "Library" && <LibraryTab stories={stories} setStories={setStories} />}
-            {activeTab === "Analyze JD" && <AnalyzeTab jd={jd} setJd={setJd} stories={stories} />}
+            {activeTab === "Analyze JD" && (
+              <AnalyzeTab
+                jd={jd} setJd={setJd} stories={stories}
+                profileOverrides={profileOverrides}
+                onAddOverride={handleAddOverride}
+                onProceedToBuild={() => setActiveTab("Resume")}
+              />
+            )}
             {activeTab === "Resume" && <ResumeTab jd={jd} setJd={setJd} />}
             {activeTab === "Cover Letter" && <CoverLetterTab jd={jd} setJd={setJd} />}
             {activeTab === "Interview Prep" && <InterviewPrepTab jd={jd} setJd={setJd} stories={stories} />}
@@ -795,7 +1073,8 @@ export default function CareerForge() {
           <div style={{ fontSize: "10px", letterSpacing: "1px", textTransform: "uppercase", color: "#3a3850", marginBottom: "6px", fontWeight: "600" }}>CareerForge · Build Log</div>
           v1 · STAR story library with persistent storage — Scott Henderson profile<br />
           v2 · Layer 2 AI tools — JD Analyzer, Resume Tailoring, Cover Letter, Interview Prep · shared JD state persisted across tabs<br />
-          <span style={{ color: "#242438" }}>Next: Layer 3 — Company Research Agent (multi-step agentic workflow) · multi-user profiles (Joshua, Aaron)</span>
+          v3a · Analysis modal with fit score + gap cards · gap correction flow → persistent profile overrides · enriched confirmed skills context to prevent gap hallucination<br />
+          <span style={{ color: "#242438" }}>Next: v3b — Company Research Agent (multi-step agentic workflow) · multi-user profiles (Joshua, Aaron)</span>
         </div>
       </div>
     </div>

@@ -17,10 +17,10 @@ const SEED_PROFILES = {
     title: "Enterprise Transformation Leader",
     // Contact fields — populated from resume upload; these are fallbacks
     name: "Scott Henderson",
-    phone: "",
-    email: "scott@hendersonsolution.com",
+    phone: "520-490-4797",
+    email: "scott23henderson@gmail.com",
     address: "Bellingham, WA",
-    linkedin: "linkedin.com/in/mrscotthenderson",
+    linkedin: "LinkedIn.com/in/mrscotthenderson",
     website: "hendersonsolution.com",
     // Resume text — populated from upload
     resumeText: "",
@@ -35,9 +35,14 @@ const SEED_PROFILES = {
       "Enterprise agile coach at Nike and Intel — transformation at scale",
     ],
     certifications: [
-      "Lean Six Sigma Black Belt — Intel internal certification program (VERIFIED)",
-      "Lean Six Sigma Green Belt — LinkedIn Learning",
-      "Lean Six Sigma Black Belt — LinkedIn Learning",
+      "PMP — Project Management Professional (VERIFIED)",
+      "SAFe SPC — SAFe Program Consultant (VERIFIED)",
+      "CSM — Certified Scrum Master (VERIFIED)",
+      "CSPO — Certified Scrum Product Owner (VERIFIED)",
+      "PMI-ACP — PMI Agile Certified Practitioner (VERIFIED)",
+      "Lean Six Sigma Black Belt — Intel internal + LinkedIn Learning (VERIFIED — do not flag as gap)",
+      "ITIL v4 Foundation (VERIFIED)",
+      "Certified Chief AI Officer — 2025 (VERIFIED)",
     ],
     implementations: [
       "NetSuite ERP — full end-to-end implementation at CCR, on time and under budget (VERIFIED)",
@@ -49,7 +54,7 @@ const SEED_PROFILES = {
       "All implementations delivered on time and under budget — hands-on lead, not oversight",
     ],
     products: [
-      "Nike Airbag Inspection Platform — full product lifecycle from whiteboard to production. ~$600M revenue in first year. Led OCM and global factory adoption. Still in active use. (VERIFIED IT PRODUCT EXPERIENCE)",
+      "Nike B2B Supply Chain Platform (OIA — Oregon International Airfreight) — full product lifecycle from whiteboard to production. B2B platform for factories to order airbags and manage supply chain. ~$600M revenue impact in first year. Led OCM and global factory adoption. Still in active use. (VERIFIED PRODUCT/PLATFORM EXPERIENCE — not inspection, ordering and supply chain)",
     ],
     industries: [
       "Renewable energy (grid-scale solar, wind, storage) — EDF Renewables, Cypress Creek Renewables",
@@ -86,7 +91,7 @@ const SEED_STORIES_BY_PROFILE = {
     { id: "story-001", title: "$28M EBITDA Improvement — EDF Renewables", company: "EDF Renewables", role: "VP Technology", competencies: ["Financial Impact","Transformation","Technical"], situation: "EDF Renewables had a fragmented technology landscape — redundant platforms, siloed data, no consolidated view of asset performance or cost.", task: "Identify and execute a platform consolidation strategy to reduce operational cost while improving data quality and board-level reporting.", action: "Led cross-functional audit of full tech stack, identified $13M in redundant SaaS spend via ledger mining, rationalized vendor portfolio, rearchitected core platforms. Built business case and presented to C-suite and board. Owned execution through go-live.", result: "$28M annualized EBITDA improvement. 15% OPEX reduction. Improved board reporting accuracy.", tags: ["P&L","platform consolidation","cost reduction","board reporting","enterprise architecture"], starred: true },
     { id: "story-002", title: "27% Reduction in Compliance Fines — CCR AI Governance", company: "Cypress Creek Renewables", role: "Senior Director, Enterprise Applications", competencies: ["Governance","Technical","Financial Impact"], situation: "CCR faced escalating compliance fines due to inconsistent data governance and manual audit processes.", task: "Design and implement an AI-assisted governance framework to reduce compliance risk.", action: "Architected AI governance implementation covering automated compliance monitoring, audit trail generation, and exception flagging. Built stakeholder alignment. Managed vendor selection and implementation.", result: "27% reduction in compliance-related fines. Repeatable framework adopted across portfolio. ~40% reduction in manual audit burden.", tags: ["AI governance","compliance","risk reduction","regulatory","automation"], starred: true },
     { id: "story-003", title: "$13M SaaS Catalog via Ledger Mining", company: "EDF Renewables", role: "VP Technology", competencies: ["Financial Impact","Vendor Management","Strategy"], situation: "No single owner had visibility into total SaaS spend across EDF's U.S. operations.", task: "Surface total SaaS exposure, identify redundancy, build a rationalization roadmap.", action: "Designed and executed ledger mining process with finance. Built vendor catalog, mapped redundancies, developed phased rationalization plan.", result: "$13M SaaS catalog identified. 15% OPEX reduction. Established ongoing SaaS governance.", tags: ["SaaS","spend analysis","vendor management","OPEX","ledger mining"], starred: false },
-    { id: "story-004", title: "Nike Airbag Inspection Platform", company: "Nike", role: "Enterprise Agile Coach", competencies: ["Transformation","Leadership","Technical"], situation: "Nike needed a digital inspection platform for airbag manufacturing across global factories.", task: "Lead product development from concept to global production deployment.", action: "Led full product lifecycle. Designed and led OCM program for global factory adoption across multiple sites.", result: "Platform deployed to production. ~$600M revenue in first year. Still in active use globally.", tags: ["product","OCM","factory","manufacturing","Nike","digital platform"], starred: false },
+    { id: "story-004", title: "Nike OIA Supply Chain Platform — Full Product Lifecycle", company: "Nike / Percipio", role: "Program Manager & Scrum Master", competencies: ["Transformation","Leadership","Technical"], situation: "Nike needed a B2B supply chain platform for OIA (Oregon International Airfreight) to enable factories to order airbags and manage supply chain — starting from whiteboard.", task: "Lead product development from concept to global production deployment and drive factory adoption.", action: "Led full product lifecycle as program PM and Scrum Master across distributed teams. Managed sprint cadence, backlog health, dependency tracking from MVP through production scale. Designed and led OCM for global factory adoption.", result: "Platform deployed to production. ~$600M revenue impact in first year. Still in active use globally.", tags: ["product","supply chain","B2B","OIA","Nike","OCM"], starred: false },
   ],
   joshua: [],
   aaron: [],
@@ -459,7 +464,7 @@ function CopyBtn({ text }) {
 function JDInput({ jd, setJd }) {
   return (
     <div style={{ marginBottom: "24px" }}>
-      <label style={S.label}>Job Description — paste here to use across all tools</label>
+      <label style={S.label}>Job Description</label>
       <textarea value={jd} onChange={e => setJd(e.target.value)} placeholder="Paste the full job description here…" rows={6} style={S.textarea} onFocus={e => e.target.style.borderColor = "#4a4abf"} onBlur={e => e.target.style.borderColor = "#2a2a3a"} />
     </div>
   );
@@ -564,7 +569,10 @@ function GapCorrectionPanel({ gaps, corrections, onSave, onDone }) {
   return (
     <div style={{ background: "#0d0e1a", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "24px", marginBottom: "24px" }}>
       <div style={{ fontSize: "14px", fontWeight: "600", color: "#c0b8d8", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>Correct the Gaps</div>
-      <div style={{ fontSize: "12px", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "20px" }}>Flag any gap the AI got wrong. Corrections persist and feed all future analyses.</div>
+      <div style={{ fontSize: "12px", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "8px" }}>Flag any gap the AI got wrong and explain why. Corrections are saved to your profile and will prevent the same gap from appearing in future analyses.</div>
+      <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px", padding: "8px 12px", marginBottom: "16px", fontFamily: "system-ui, sans-serif", fontSize: "11px", color: "#8a7040", lineHeight: "1.5" }}>
+        ✓ Saved corrections become part of your verified profile. The AI will treat them as facts and never re-flag them. You can view all active corrections in Settings.
+      </div>
       {local.map((gap, i) => (
         <div key={i} style={{ border: `1px solid ${gap.flagged ? "rgba(201,168,76,0.4)" : "#1e1e2e"}`, borderRadius: "6px", padding: "14px 16px", marginBottom: "10px", background: gap.flagged ? "rgba(201,168,76,0.04)" : "rgba(255,255,255,0.01)" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
@@ -677,7 +685,7 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
       <JDInput jd={jd} setJd={setJd} />
       {Object.keys(corrections).length > 0 && (
         <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "10px 14px", marginBottom: "16px", fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#8a7040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>✓ {Object.keys(corrections).length} correction{Object.keys(corrections).length > 1?"s":""} active — AI will not re-flag these</span>
+          <span>✓ {Object.keys(corrections).length} gap correction{Object.keys(corrections).length > 1?"s":""} saved to your profile — AI will not re-flag these</span>
           <button onClick={() => setShowCorrections(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px" }}>View / edit</button>
         </div>
       )}
@@ -1371,7 +1379,7 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
 // SETTINGS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProfile, isOnlyProfile }) {
+function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProfile, isOnlyProfile, corrections, onUpdateCorrections }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...profile });
   const [reupload, setReupload] = useState(false);
@@ -1456,6 +1464,30 @@ function SettingsTab({ profile, onUpdateProfile, saveJD, setSaveJD, onDeleteProf
           <span style={{ fontSize: "12px", color: "#3a3858" }}>Toggle to control whether your JD persists between sessions</span>
         </div>
       </div>
+
+      {/* Saved corrections */}
+      {Object.keys(corrections).length > 0 && (
+        <div style={{ ...S.section, marginBottom: "24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <div style={{ ...S.label, margin: 0 }}>Saved Profile Corrections ({Object.keys(corrections).length})</div>
+            <button onClick={() => { if (window.confirm("Clear all corrections?")) onUpdateCorrections({}); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px", color: "#6a3a3a", borderColor: "#2e1e1e" }}>Clear all</button>
+          </div>
+          <div style={{ fontSize: "12px", color: "#4a4860", fontFamily: "system-ui, sans-serif", marginBottom: "12px", lineHeight: "1.5" }}>
+            These corrections are injected into every JD analysis and override AI-generated gap assessments.
+          </div>
+          {Object.entries(corrections).map(([title, correction]) => (
+            <div key={title} style={{ background: "rgba(201,168,76,0.04)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "4px", padding: "12px 14px", marginBottom: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#c0b0a0", fontFamily: "system-ui, sans-serif", marginBottom: "4px" }}>{title}</div>
+                  <div style={{ fontSize: "11px", color: "#7a6a50", fontFamily: "system-ui, sans-serif", lineHeight: "1.5" }}>{correction}</div>
+                </div>
+                <button onClick={() => { const updated = { ...corrections }; delete updated[title]; onUpdateCorrections(updated); }} style={{ background: "none", border: "none", color: "#6a3a3a", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Danger zone */}
       {!isOnlyProfile && (
@@ -1724,6 +1756,8 @@ export default function CareerForge() {
                 setSaveJD={setSaveJD}
                 onDeleteProfile={handleDeleteProfile}
                 isOnlyProfile={Object.keys(profiles).length === 1}
+                corrections={corrections}
+                onUpdateCorrections={setCorrections}
               />
             )}
           </>

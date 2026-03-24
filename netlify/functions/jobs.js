@@ -1,13 +1,34 @@
-body: JSON.stringify({
-  startUrls: [
-    'https://hiring.cafe/?searchState={"query":"transformation director","dateFetchedPastNDays":7}'
-  ],
-  maxItems: 50
-})
-```
+export async function handler() {
+  if (!process.env.APIFY_TOKEN) {
+    return { statusCode: 500, body: JSON.stringify({ error: "no token" }) };
+  }
 
-Push, redeploy, hit `/.netlify/functions/jobs` — paste the new `runId` and `datasetId` back here.
+  const searchState = encodeURIComponent(JSON.stringify({
+    query: "transformation director",
+    dateFetchedPastNDays: 7,
+    sortBy: "relevance"
+  }));
 
-While that deploys, also try this directly in your browser to confirm HiringCafe has results for your target roles:
-```
-https://hiring.cafe/?searchState={"query":"transformation director","dateFetchedPastNDays":7}
+  const res = await fetch(
+    `https://api.apify.com/v2/acts/memo23~apify-hiring-cafe-scraper/runs?token=${process.env.APIFY_TOKEN}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startUrls: [
+          `https://hiring.cafe/?searchState=${searchState}`
+        ],
+        maxItems: 50
+      })
+    }
+  );
+
+  const data = await res.json();
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      runId: data?.data?.id,
+      datasetId: data?.data?.defaultDatasetId
+    })
+  };
+}

@@ -98,7 +98,7 @@ const SEED_STORIES_BY_PROFILE = {
 };
 
 const COMPETENCIES = ["Transformation","Financial Impact","Leadership","Technical","Agile/Delivery","Governance","Vendor Management","Strategy","Stakeholder"];
-const TABS = ["Library","Analyze JD","Resume","Cover Letter","Interview Prep","Research","Settings"];
+const TABS = ["Analyze JD","Resume","Cover Letter","My Stories","Interview Prep","Research","Settings"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTACT EXTRACTION — parse resume text via AI into structured contact fields
@@ -162,11 +162,15 @@ function useApiLock() {
 // STORAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function storageGet(key) {
-  try { const r = await window.storage.get(key); return r?.value ? JSON.parse(r.value) : null; } catch { return null; }
+// localStorage-backed storage — works on Netlify and all browsers
+function storageGet(key) {
+  try {
+    const val = localStorage.getItem(key);
+    return val ? JSON.parse(val) : null;
+  } catch { return null; }
 }
-async function storageSet(key, value) {
-  try { await window.storage.set(key, JSON.stringify(value)); } catch {}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -569,7 +573,7 @@ function PrivacyGate({ onAccept }) {
 // ANALYSIS MODAL (decision gate)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AnalysisModal({ score, rationale, gaps, onBuildResume, onResumeOnly, onCorrect, onNewJD }) {
+function AnalysisModal({ score, rationale, gaps, onBuildResume, onResumeOnly, onCorrect, onNewJD, onDismiss }) {
   const verdict =
     score >= 8 ? {
       label: "Excellent Match! 🎯",
@@ -604,8 +608,16 @@ function AnalysisModal({ score, rationale, gaps, onBuildResume, onResumeOnly, on
     };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div style={{ background: "#181a2e", border: `1px solid ${verdict.border}`, borderRadius: "14px", width: "100%", maxWidth: "620px", maxHeight: "88vh", overflowY: "auto", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
+    <div
+      onClick={onDismiss}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: "#181a2e", border: `1px solid ${verdict.border}`, borderRadius: "14px", width: "100%", maxWidth: "620px", maxHeight: "88vh", overflowY: "auto", padding: "36px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)", position: "relative" }}
+      >
+        {/* X dismiss button */}
+        <button onClick={onDismiss} style={{ position: "absolute", top: "16px", right: "16px", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "32px", height: "32px", cursor: "pointer", color: "#a0a0c0", fontSize: "16px", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui" }}>✕</button>
 
         {/* Score */}
         <div style={{ textAlign: "center", marginBottom: "28px" }}>
@@ -815,7 +827,30 @@ function AnalyzeTab({ jd, setJd, stories, corrections, onSaveCorrections, onBuil
           onResumeOnly={() => { setShowModal(false); onResumeOnly(parsedCompany); }}
           onCorrect={() => { setShowModal(false); setShowCorrections(true); }}
           onNewJD={() => { setShowModal(false); onNewJD(); }}
+          onDismiss={() => setShowModal(false)}
         />
+      )}
+
+      {/* Score summary retained after modal dismiss */}
+      {!showModal && parsedScore !== null && !showCorrections && (
+        <div
+          onClick={() => setShowModal(true)}
+          style={{
+            background: parsedScore >= 8 ? "rgba(74,222,128,0.08)" : parsedScore >= 6 ? "rgba(251,191,36,0.08)" : parsedScore >= 4 ? "rgba(251,146,60,0.08)" : "rgba(248,113,113,0.08)",
+            border: `1px solid ${parsedScore >= 8 ? "rgba(74,222,128,0.3)" : parsedScore >= 6 ? "rgba(251,191,36,0.3)" : parsedScore >= 4 ? "rgba(251,146,60,0.3)" : "rgba(248,113,113,0.3)"}`,
+            borderRadius: "8px", padding: "12px 18px", marginBottom: "20px",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", transition: "opacity 0.15s"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <span style={{ fontSize: "26px", fontWeight: "800", color: parsedScore >= 8 ? "#4ade80" : parsedScore >= 6 ? "#fbbf24" : parsedScore >= 4 ? "#fb923c" : "#f87171", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+              {parsedScore}/10
+            </span>
+            <span style={{ fontSize: "14px", color: "#c8c4e8", fontFamily: "'DM Sans', system-ui, sans-serif" }}>{parsedRationale}</span>
+          </div>
+          <span style={{ fontSize: "12px", color: "#8880b8", fontFamily: "'DM Sans', system-ui, sans-serif" }}>View details →</span>
+        </div>
       )}
       {reScoring && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
@@ -1272,86 +1307,88 @@ function Tag({ label, color="#3a3d5c", textColor="#8880a0" }) {
   return <span style={{ background: color, color: textColor, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: "nowrap" }}>{label}</span>;
 }
 
-function CompBadge({ label, active, onClick }) {
-  return <button onClick={onClick} style={{ background: active?"rgba(99,140,255,0.18)":"rgba(255,255,255,0.03)", color: active?"#8aacff":"#5a5870", border: `1px solid ${active?"#4a6abf":"#3a3d5c"}`, borderRadius: "4px", padding: "5px 12px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer" }}>{label}</button>;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// STORIES TAB — extract from resume or build via guided interview
+// ─────────────────────────────────────────────────────────────────────────────
 
-function StoryCard({ story, onEdit, onDelete, onStar }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${story.starred?"rgba(99,140,255,0.3)":"#2e3050"}`, borderRadius: "8px", marginBottom: "12px", overflow: "hidden" }}>
-      <div onClick={() => setExpanded(!expanded)} style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: "12px", background: expanded?"rgba(99,140,255,0.04)":"transparent" }}>
-        <button onClick={e => { e.stopPropagation(); onStar(story.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", padding: "0", marginTop: "1px", flexShrink: 0 }}>{story.starred?"⭐":"☆"}</button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "15px", fontWeight: "600", color: "#d8d0f0", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "6px" }}>{story.title}</div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            <Tag label={story.company} color="rgba(99,140,255,0.12)" textColor="#7a9aef" />
-            <Tag label={story.role} />
-            {story.competencies.map(c => <Tag key={c} label={c} color="rgba(180,140,255,0.1)" textColor="#b090d0" />)}
-          </div>
-        </div>
-        <div style={{ color: "#3e3a4e", fontSize: "18px", flexShrink: 0 }}>{expanded?"▲":"▼"}</div>
-      </div>
-      {expanded && (
-        <div style={{ padding: "0 20px 20px 48px", borderTop: "1px solid #1a1a2a" }}>
-          {[{l:"S — Situation",k:"situation",c:"#6b8080"},{l:"T — Task",k:"task",c:"#6b7a80"},{l:"A — Action",k:"action",c:"#6b6880"},{l:"R — Result",k:"result",c:"#7a8060"}].map(({l,k,c}) => (
-            <div key={k} style={{ marginTop: "16px" }}>
-              <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: c, fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "6px" }}>{l}</div>
-              <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#b0a8c0", fontFamily: "Georgia, serif" }}>{story[k]}</div>
-            </div>
-          ))}
-          {story.tags?.length > 0 && <div style={{ marginTop: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>{story.tags.map(t => <Tag key={t} label={`#${t}`} color="rgba(255,255,255,0.04)" textColor="#8880b8" />)}</div>}
-          <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
-            <button onClick={() => onEdit(story)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px" }}>✏️ Edit</button>
-            <button onClick={() => onDelete(story.id)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", color: "#6a3a3a", borderColor: "#2e1e1e" }}>Delete</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+const STORY_EXTRACT_SYSTEM = (profile) => `You are an expert career coach helping ${profile.name} build a STAR story library.
 
-function generateId() { return `story-${Date.now()}-${Math.random().toString(36).slice(2,7)}`; }
+Analyze the resume and extract 4-8 significant achievements or experiences that would make strong interview stories.
 
-function StoryEditor({ story, onSave, onCancel }) {
-  const blank = { id: generateId(), title: "", company: "", role: "", competencies: [], situation: "", task: "", action: "", result: "", tags: "", starred: false };
-  const [form, setForm] = useState(story ? { ...story, tags: story.tags?.join(", ") || "" } : blank);
-  const field = (key, label, multi=false, hint="") => (
-    <div style={{ marginBottom: "18px" }}>
-      <label style={{ ...S.label, color: "#6860a0" }}>{label}{hint&&<span style={{ color: "#3e3a50", marginLeft: "8px", letterSpacing: 0, textTransform: "none", fontSize: "11px" }}>{hint}</span>}</label>
-      {multi ? <textarea value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} rows={4} style={S.textarea} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} /> : <input type="text" value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} style={S.input} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />}
-    </div>
-  );
-  return (
-    <div style={{ background: "#1e2035", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "28px" }}>
-      <div style={{ fontSize: "16px", fontWeight: "600", color: "#e0dcf4", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "24px" }}>{story?"Edit Story":"Add New Story"}</div>
-      {field("title","Story Title")}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}><div>{field("company","Company")}</div><div>{field("role","Role / Title")}</div></div>
-      <div style={{ marginBottom: "18px" }}>
-        <label style={{ ...S.label, color: "#6860a0" }}>Competencies</label>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {COMPETENCIES.map(c => <CompBadge key={c} label={c} active={form.competencies.includes(c)} onClick={() => setForm(f=>({...f,competencies:f.competencies.includes(c)?f.competencies.filter(x=>x!==c):[...f.competencies,c]}))} />)}
-        </div>
-      </div>
-      {field("situation","S — Situation",true,"Context")}
-      {field("task","T — Task",true,"Your responsibility")}
-      {field("action","A — Action",true,"What you did")}
-      {field("result","R — Result",true,"Quantified outcomes")}
-      {field("tags","Tags",false,"comma-separated")}
-      <div style={{ display: "flex", gap: "12px" }}>
-        <button onClick={() => { if(!form.title.trim())return; onSave({...form,tags:form.tags.split(",").map(t=>t.trim()).filter(Boolean)}); }} style={S.btn}>Save Story</button>
-        <button onClick={onCancel} style={S.btnGhost}>Cancel</button>
-      </div>
-    </div>
-  );
-}
+For each story return a JSON object in this exact array format:
+[
+  {
+    "title": "Brief memorable title — lead with the outcome or metric",
+    "company": "company name",
+    "role": "job title at that company",
+    "competencies": ["one or two from: Transformation, Financial Impact, Leadership, Technical, Agile/Delivery, Governance, Vendor Management, Strategy, Stakeholder"],
+    "hook": "One powerful sentence leading with the result — executive HERO opener. E.g. 'I cut $28M in annual waste — not through layoffs, but by consolidating a fragmented platform ecosystem.'",
+    "situation": "2-3 sentences: what was the context, the problem, the stakes",
+    "task": "1-2 sentences: what were you specifically responsible for",
+    "action": "3-4 sentences: what you specifically did — concrete and active",
+    "result": "1-3 sentences: quantified outcomes wherever possible",
+    "tags": ["3-5 keyword tags"]
+  }
+]
 
-function LibraryTab({ stories, setStories }) {
+Only extract stories with clear actions and outcomes. Skip generic job description language.
+Return ONLY the JSON array, no preamble.`;
+
+const INTERVIEW_SYSTEM = (profile, story) => `You are a warm, encouraging career coach helping ${profile.name} build a STAR interview story.
+
+STAR FORMAT — remind the user of this framing as you ask each question:
+- Situation: "Tell me about a time when…" / "Describe a situation where…"
+- Task: "What were you responsible for?" / "What was your role?"
+- Action: "Walk me through what you did." / "How did you approach it?"
+- Result: "What was the outcome?" / "What impact did you have?"
+
+When asking each section, briefly remind the user what interviewers are listening for with that question type. Keep it natural — one sentence of coaching, then the question.
+
+If the user gives a vague answer, ask for a specific number, timeline, or concrete example.
+If the user skips ahead, gently bring them back to the current section.
+
+Current story being built:
+${JSON.stringify(story, null, 2)}
+
+Rules:
+- Ask ONE focused question at a time
+- Be warm, conversational, and encouraging — not clinical or robotic
+- When a field has enough content, move to the next section
+- When all four STAR fields are reasonably complete, respond with ONLY a JSON object:
+{"complete": true, "situation": "...", "task": "...", "action": "...", "result": "...", "hook": "One powerful sentence leading with the result, executive voice"}
+- Otherwise respond with just your coaching + question as plain text — no JSON`;
+
+// MY STORIES — combined library + builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MyStoriesTab({ profile, stories, setStories }) {
+  // view | edit | extract | interview-pick | interview-chat | interview-review
+  const [mode, setMode] = useState("view");
   const [editing, setEditing] = useState(null);
   const [filterComp, setFilterComp] = useState(null);
   const [filterStarred, setFilterStarred] = useState(false);
   const [search, setSearch] = useState("");
-  const handleSave = s => { setStories(p => p.find(x=>x.id===s.id)?p.map(x=>x.id===s.id?s:x):[...p,s]); setEditing(null); };
+
+  // Extract state
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [extractError, setExtractError] = useState(null);
+
+  // Interview state
+  const [bulletPoints, setBulletPoints] = useState([]);
+  const [activeBullet, setActiveBullet] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [userInput, setUserInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [builtStory, setBuiltStory] = useState(null);
+  const [customBullet, setCustomBullet] = useState("");
+
+  const apiLocked = useApiLock();
+  const sub = { fontSize: "13px", color: "#9890b8", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.65" };
+
+  // Library handlers
+  const handleSave = s => { setStories(p => p.find(x=>x.id===s.id)?p.map(x=>x.id===s.id?s:x):[...p,s]); setMode("view"); setEditing(null); };
   const handleDelete = id => { if(window.confirm("Delete this story?")) setStories(p=>p.filter(s=>s.id!==id)); };
   const handleStar = id => setStories(p=>p.map(s=>s.id===id?{...s,starred:!s.starred}:s));
   const filtered = stories.filter(s => {
@@ -1360,26 +1397,367 @@ function LibraryTab({ stories, setStories }) {
     if (search) { const q=search.toLowerCase(); return s.title.toLowerCase().includes(q)||s.company.toLowerCase().includes(q)||s.tags?.some(t=>t.toLowerCase().includes(q))||s.result.toLowerCase().includes(q); }
     return true;
   });
-  if (editing) return <StoryEditor story={editing==="new"?null:editing} onSave={handleSave} onCancel={()=>setEditing(null)} />;
+
+  // Extract handlers
+  const handleExtract = async () => {
+    setMode("extract"); setExtracting(true); setExtractError(null); setExtracted([]);
+    try {
+      const text = await callClaude(STORY_EXTRACT_SYSTEM(profile), profile.resumeText, 3000);
+      const m = text.match(/\[[\s\S]*\]/);
+      if (!m) throw new Error("Could not parse stories from resume");
+      const parsed = JSON.parse(m[0]);
+      const withIds = parsed.map(s => ({ ...s, id: generateId(), starred: false, tags: s.tags||[] }));
+      setExtracted(withIds);
+      setSelectedIds(new Set(withIds.map(s => s.id)));
+    } catch (e) { setExtractError(`Extraction failed: ${e.message}`); }
+    finally { setExtracting(false); }
+  };
+
+  const parseBullets = async () => {
+    if (!profile.resumeText) return;
+    setChatLoading(true);
+    try {
+      const text = await callClaude(
+        `Extract 6-10 achievement bullet points from this resume. Return ONLY a JSON array of strings — each a single bullet mentioning a result, metric, or notable action. No preamble.`,
+        profile.resumeText.slice(0, 4000), 800
+      );
+      const m = text.match(/\[[\s\S]*\]/);
+      if (m) setBulletPoints(JSON.parse(m[0]));
+    } catch {}
+    finally { setChatLoading(false); }
+  };
+
+  const saveExtracted = () => {
+    const toAdd = extracted.filter(s => selectedIds.has(s.id));
+    const existingIds = new Set(stories.map(s => s.id));
+    setStories(p => [...p, ...toAdd.filter(s => !existingIds.has(s.id))]);
+    setExtracted([]); setSelectedIds(new Set()); setMode("view");
+  };
+
+  const startInterview = (bullet) => {
+    setActiveBullet(bullet);
+    setBuiltStory({ situation:"", task:"", action:"", result:"", hook:"", title:"", company:"", role:"", competencies:[], tags:[] });
+    const opener = `Let's turn this into a polished interview story:
+
+"${bullet}"
+
+I'll walk you through the **STAR format** — the structure most interviewers use to evaluate behavioral answers:
+
+- **S — Situation:** Sets the scene. Answers *"Tell me about a time when…"*
+- **T — Task:** Your specific responsibility. Answers *"What were you accountable for?"*
+- **A — Action:** What YOU did. Answers *"Walk me through your approach."*
+- **R — Result:** The outcome. Answers *"What was the impact?"*
+
+We'll also build a **Hook** — a one-sentence opener leading with the result, for when you only have 30 seconds on a phone screen.
+
+Let's start with **Situation**. What was going on in the organization — what was the problem, challenge, or context that made this work necessary?`;
+    setMessages([{ role: "assistant", content: opener }]);
+    setMode("interview-chat");
+  };
+
+  const handleSend = async () => {
+    if (!userInput.trim() || chatLoading) return;
+    const newMessages = [...messages, { role:"user", content:userInput }];
+    setMessages(newMessages); setUserInput(""); setChatLoading(true);
+    try {
+      const history = newMessages.map(m=>`${m.role==="user"?"Candidate":"Coach"}: ${m.content}`).join("\n\n");
+      const response = await callClaude(
+        INTERVIEW_SYSTEM(profile, builtStory),
+        `Conversation so far:\n${history}\n\nBullet point being developed: "${activeBullet}"`,
+        1000
+      );
+      const jsonMatch = response.match(/\{"complete":\s*true[\s\S]*?\}/);
+      if (jsonMatch) {
+        const completed = JSON.parse(jsonMatch[0]);
+        setBuiltStory(prev => ({
+          ...prev, id: generateId(),
+          situation: completed.situation||prev.situation,
+          task: completed.task||prev.task,
+          action: completed.action||prev.action,
+          result: completed.result||prev.result,
+          hook: completed.hook||prev.hook,
+          title: completed.result?.split(".")[0]?.slice(0,60)||activeBullet.slice(0,60),
+          starred: false, tags: [],
+        }));
+        setMode("interview-review");
+        setMessages(m=>[...m,{ role:"assistant", content:"Perfect — I have everything I need. Here's your complete story. Review and edit below before saving." }]);
+      } else {
+        setMessages(m=>[...m,{ role:"assistant", content:response }]);
+      }
+    } catch (e) {
+      setMessages(m=>[...m,{ role:"assistant", content:`Sorry, something went wrong: ${e.message}` }]);
+    }
+    finally { setChatLoading(false); }
+  };
+
+  const saveBuilt = () => {
+    if (builtStory) {
+      const existingIds = new Set(stories.map(s=>s.id));
+      if (!existingIds.has(builtStory.id)) setStories(p=>[...p, builtStory]);
+      setBuiltStory(null); setMessages([]); setActiveBullet(null); setMode("view");
+    }
+  };
+
+  const backToView = () => { setMode("view"); setEditing(null); setExtracted([]); setMessages([]); setBuiltStory(null); };
+
+  // ── EDIT mode ──
+  if (mode === "edit") return (
+    <div>
+      <button onClick={backToView} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px", marginBottom:"20px" }}>← Back to My Stories</button>
+      <StoryEditor story={editing==="new"?null:editing} onSave={handleSave} onCancel={backToView} />
+    </div>
+  );
+
+  // ── EXTRACT mode ──
+  if (mode === "extract") return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"24px" }}>
+        <button onClick={backToView} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>← Back</button>
+        <div style={{ fontSize:"18px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>Extract from Resume</div>
+      </div>
+      {extracting ? (
+        <div style={{ ...S.section, textAlign:"center", padding:"48px" }}>
+          <div style={{ marginBottom:"16px" }}><Spinner size={28} /></div>
+          <div style={{ fontSize:"16px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif", marginBottom:"8px" }}>Reading your resume…</div>
+          <div style={sub}>Identifying your strongest achievements and building STAR stories</div>
+        </div>
+      ) : extractError ? (
+        <div style={S.section}>
+          <div style={{ color:"#f87171", fontFamily:"'DM Sans', system-ui, sans-serif", marginBottom:"16px" }}>{extractError}</div>
+          <button onClick={handleExtract} style={S.btn}>Try again</button>
+        </div>
+      ) : extracted.length > 0 ? (
+        <div>
+          <div style={{ marginBottom:"20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"10px" }}>
+            <div style={sub}>{extracted.length} stories found — select which to add to your library</div>
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button onClick={()=>setSelectedIds(new Set(extracted.map(s=>s.id)))} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>All</button>
+              <button onClick={()=>setSelectedIds(new Set())} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>None</button>
+              <button onClick={saveExtracted} disabled={selectedIds.size===0} style={{ ...S.btn, opacity:selectedIds.size===0?0.5:1, padding:"8px 18px" }}>
+                Add {selectedIds.size} to Library
+              </button>
+            </div>
+          </div>
+          {extracted.map(story => {
+            const selected = selectedIds.has(story.id);
+            return (
+              <div key={story.id} onClick={()=>setSelectedIds(prev=>{ const n=new Set(prev); selected?n.delete(story.id):n.add(story.id); return n; })}
+                style={{ ...S.section, border:`1px solid ${selected?"#4f6ef7":"#2e3050"}`, cursor:"pointer", marginBottom:"12px", transition:"border-color 0.15s" }}>
+                <div style={{ display:"flex", gap:"14px" }}>
+                  <div style={{ width:"20px", height:"20px", borderRadius:"4px", border:`2px solid ${selected?"#4f6ef7":"#3a3d5c"}`, background:selected?"#4f6ef7":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:"2px" }}>
+                    {selected && <span style={{ color:"#fff", fontSize:"12px" }}>✓</span>}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:"15px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif", marginBottom:"4px" }}>{story.title}</div>
+                    <div style={{ fontSize:"12px", color:"#8880b8", fontFamily:"'DM Sans', system-ui, sans-serif", marginBottom:"8px" }}>{story.company} · {story.role}</div>
+                    {story.hook && <div style={{ fontSize:"13px", color:"#fbbf24", fontFamily:"Georgia, serif", fontStyle:"italic", marginBottom:"10px", padding:"8px 12px", background:"rgba(251,191,36,0.06)", borderLeft:"3px solid rgba(251,191,36,0.4)", borderRadius:"0 4px 4px 0" }}>"{story.hook}"</div>}
+                    {[["S",story.situation],["T",story.task],["A",story.action],["R",story.result]].map(([l,v])=>v&&(
+                      <div key={l} style={{ marginBottom:"5px" }}>
+                        <span style={{ fontSize:"10px", letterSpacing:"1px", textTransform:"uppercase", color:"#6860a0", fontFamily:"'DM Sans', system-ui, sans-serif", fontWeight:"600" }}>{l} </span>
+                        <span style={{ fontSize:"13px", color:"#c8c4e8", fontFamily:"Georgia, serif", lineHeight:"1.6" }}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  // ── INTERVIEW PICK ──
+  if (mode === "interview-pick") return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"24px" }}>
+        <button onClick={backToView} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>← Back</button>
+        <div style={{ fontSize:"18px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>Build a Story</div>
+      </div>
+
+      {/* STAR explanation */}
+      <div style={{ ...S.section, border:"1px solid rgba(79,110,247,0.3)", marginBottom:"24px" }}>
+        <div style={{ fontSize:"14px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif", marginBottom:"10px" }}>How STAR stories work in interviews</div>
+        <div style={{ ...sub, marginBottom:"14px" }}>Behavioral questions — "Tell me about a time when…", "Walk me through how you handled…" — are designed to hear STAR stories. Interviewers probe each layer.</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"8px" }}>
+          {[{l:"S",name:"Situation",desc:"Context and challenge",color:"#6080ef"},{l:"T",name:"Task",desc:"Your specific accountability",color:"#8b5cf6"},{l:"A",name:"Action",desc:"What YOU did — specific, active",color:"#4f6ef7"},{l:"R",name:"Result",desc:"Quantified outcomes",color:"#10b981"}].map(({l,name,desc,color})=>(
+            <div key={l} style={{ background:"#1e2240", borderRadius:"6px", padding:"10px", border:`1px solid ${color}33` }}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:"5px", marginBottom:"4px" }}>
+                <span style={{ fontSize:"16px", fontWeight:"800", color, fontFamily:"'DM Sans', system-ui, sans-serif" }}>{l}</span>
+                <span style={{ fontSize:"11px", fontWeight:"600", color:"#c8c4e8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>{name}</span>
+              </div>
+              <div style={{ fontSize:"11px", color:"#7870a0", fontFamily:"'DM Sans', system-ui, sans-serif" }}>{desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {chatLoading && bulletPoints.length===0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:"10px", color:"#8880b8", fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:"13px", marginBottom:"20px" }}>
+          <Spinner />Reading your resume for achievements…
+        </div>
+      )}
+
+      {bulletPoints.length > 0 && (
+        <div style={{ marginBottom:"24px" }}>
+          <div style={{ ...S.label, marginBottom:"10px" }}>Achievements from your resume — click one to develop</div>
+          {bulletPoints.map((b,i)=>(
+            <div key={i} onClick={()=>startInterview(b)}
+              style={{ ...S.section, cursor:"pointer", padding:"14px 18px", marginBottom:"8px", transition:"border-color 0.15s, background 0.15s" }}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor="#4f6ef7"; e.currentTarget.style.background="#1e2240";}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor="#2e3050"; e.currentTarget.style.background="#181a2e";}}>
+              <div style={{ fontSize:"14px", color:"#d8d4f0", fontFamily:"Georgia, serif", lineHeight:"1.6" }}>{b}</div>
+              <div style={{ fontSize:"11px", color:"#4f6ef7", fontFamily:"'DM Sans', system-ui, sans-serif", marginTop:"5px" }}>Click to build this story →</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ ...S.label, marginBottom:"8px" }}>Or describe your own achievement</div>
+      <textarea value={customBullet} onChange={e=>setCustomBullet(e.target.value)} placeholder="e.g. Led migration to NetSuite, delivered on time and under budget…" rows={3}
+        style={S.textarea} onFocus={e=>e.target.style.borderColor="#4f6ef7"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+      <button onClick={()=>{ if(customBullet.trim()) startInterview(customBullet.trim()); }} disabled={!customBullet.trim()} style={{ ...S.btn, marginTop:"12px", opacity:!customBullet.trim()?0.5:1 }}>
+        Build this story
+      </button>
+    </div>
+  );
+
+  // ── INTERVIEW CHAT ──
+  if (mode === "interview-chat") return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"16px" }}>
+        <button onClick={()=>setMode("interview-pick")} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>← Back</button>
+        <div style={{ fontSize:"16px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>Building your story</div>
+      </div>
+
+      {/* STAR quick ref */}
+      <div style={{ display:"flex", gap:"6px", marginBottom:"14px", flexWrap:"wrap" }}>
+        {[{letter:"S",label:"Situation",q:"\"Tell me about a time when…\"",color:"#6080ef"},{letter:"T",label:"Task",q:"\"What were you responsible for?\"",color:"#8b5cf6"},{letter:"A",label:"Action",q:"\"Walk me through your approach.\"",color:"#4f6ef7"},{letter:"R",label:"Result",q:"\"What was the impact?\"",color:"#10b981"}].map(({letter,label,q,color})=>(
+          <div key={letter} style={{ flex:"1", minWidth:"110px", background:"#181a2e", border:`1px solid ${color}44`, borderRadius:"6px", padding:"8px 10px" }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:"5px", marginBottom:"2px" }}>
+              <span style={{ fontSize:"14px", fontWeight:"800", color, fontFamily:"'DM Sans', system-ui, sans-serif" }}>{letter}</span>
+              <span style={{ fontSize:"11px", fontWeight:"600", color:"#c8c4e8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>{label}</span>
+            </div>
+            <div style={{ fontSize:"10px", color:"#5860a0", fontFamily:"'DM Sans', system-ui, sans-serif", fontStyle:"italic" }}>{q}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ background:"#181a2e", border:"1px solid #2e3050", borderRadius:"10px", padding:"20px", marginBottom:"14px", maxHeight:"380px", overflowY:"auto" }}>
+        {messages.map((m,i)=>(
+          <div key={i} style={{ marginBottom:"14px", display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start" }}>
+            <div style={{ maxWidth:"85%", padding:"12px 16px", borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px", background:m.role==="user"?"#4f6ef7":"#1e2240", color:m.role==="user"?"#fff":"#d8d4f0", fontSize:"14px", fontFamily:m.role==="user"?"'DM Sans', system-ui, sans-serif":"Georgia, serif", lineHeight:"1.65", whiteSpace:"pre-line" }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {chatLoading && <div style={{ display:"flex", gap:"8px", alignItems:"center", color:"#8880b8", fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:"13px" }}><Spinner />Thinking…</div>}
+      </div>
+
+      <div style={{ display:"flex", gap:"10px" }}>
+        <textarea value={userInput} onChange={e=>setUserInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleSend();}}}
+          placeholder="Type your answer… (Enter to send, Shift+Enter for new line)" rows={3}
+          style={{ ...S.textarea, flex:1 }} disabled={chatLoading}
+          onFocus={e=>e.target.style.borderColor="#4f6ef7"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+        <button onClick={handleSend} disabled={!userInput.trim()||chatLoading||apiLocked} style={{ ...S.btn, alignSelf:"flex-end", padding:"12px 20px" }}>Send</button>
+      </div>
+    </div>
+  );
+
+  // ── INTERVIEW REVIEW ──
+  if (mode === "interview-review" && builtStory) return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"20px" }}>
+        <button onClick={()=>setMode("interview-pick")} style={{ ...S.btnGhost, fontSize:"12px", padding:"6px 12px" }}>← Build another</button>
+        <div style={{ fontSize:"16px", fontWeight:"600", color:"#e8e4f8", fontFamily:"'DM Sans', system-ui, sans-serif" }}>Review your story</div>
+      </div>
+      <div style={{ ...sub, marginBottom:"20px" }}>Edit anything before saving to your library.</div>
+      {[{key:"title",label:"Story Title"},{key:"company",label:"Company"},{key:"role",label:"Role / Title"},{key:"hook",label:"Hook — one powerful sentence leading with the result"},{key:"situation",label:"S — Situation",multi:true},{key:"task",label:"T — Task",multi:true},{key:"action",label:"A — Action",multi:true},{key:"result",label:"R — Result",multi:true}].map(({key,label,multi})=>(
+        <div key={key} style={{ marginBottom:"16px" }}>
+          <label style={S.label}>{label}</label>
+          {multi
+            ? <textarea value={builtStory[key]||""} onChange={e=>setBuiltStory(s=>({...s,[key]:e.target.value}))} rows={3} style={S.textarea} onFocus={e=>e.target.style.borderColor="#4f6ef7"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+            : <input type="text" value={builtStory[key]||""} onChange={e=>setBuiltStory(s=>({...s,[key]:e.target.value}))} style={S.input} onFocus={e=>e.target.style.borderColor="#4f6ef7"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+          }
+        </div>
+      ))}
+      <div style={{ display:"flex", gap:"10px" }}>
+        <button onClick={saveBuilt} style={S.btn}>Save to Library</button>
+        <button onClick={()=>setMode("interview-pick")} style={S.btnGhost}>Start another</button>
+      </div>
+    </div>
+  );
+
+  // ── MAIN VIEW ──
   return (
     <div>
-      <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search stories…" style={{ ...S.input, width: "200px" }} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
-        <button onClick={()=>setFilterStarred(!filterStarred)} style={{ ...S.btnGhost, fontSize: "12px", background: filterStarred?"rgba(99,140,255,0.15)":"transparent", color: filterStarred?"#8aacff":"#8880b8", borderColor: filterStarred?"#4a6abf":"#3a3d5c" }}>⭐ Starred</button>
-        <button onClick={()=>setEditing("new")} style={{ ...S.btn, marginLeft: "auto", padding: "8px 18px" }}>+ Add Story</button>
-      </div>
-      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "20px" }}>
-        <CompBadge label="All" active={!filterComp} onClick={()=>setFilterComp(null)} />
-        {COMPETENCIES.map(c=><CompBadge key={c} label={c} active={filterComp===c} onClick={()=>setFilterComp(filterComp===c?null:c)} />)}
-      </div>
-      {filtered.length===0?(
-        <div style={{ color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "14px", padding: "40px", textAlign: "center", border: "1px dashed #1e1e2e", borderRadius: "8px" }}>
-          No stories match.{" "}<button onClick={()=>{setFilterComp(null);setFilterStarred(false);setSearch("");}} style={{ background: "none", border: "none", color: "#5a5aaf", cursor: "pointer", fontSize: "14px" }}>Clear filters</button>
+      {/* Encouraging prompt */}
+      <div style={{ background: "linear-gradient(135deg, #1e2240 0%, #1a1e38 100%)", border: "1px solid rgba(79,110,247,0.3)", borderRadius: "12px", padding: "24px 28px", marginBottom: "28px" }}>
+        <div style={{ fontSize: "17px", fontWeight: "700", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "10px" }}>
+          Your stories are your competitive edge 🏆
         </div>
-      ) : filtered.map(s=><StoryCard key={s.id} story={s} onEdit={setEditing} onDelete={handleDelete} onStar={handleStar} />)}
+        <div style={{ fontSize: "14px", color: "#9890b8", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.7", marginBottom: "18px" }}>
+          Strong STAR stories power every part of CareerForge — they sharpen your JD fit analysis, strengthen your cover letter, and prepare you for behavioral interviews. Don't limit yourself to your resume.
+          <strong style={{ color: "#c8c4e8" }}> Share a success that isn't on paper yet.</strong> A promotion you drove, a team you turned around, a result that surprised even you.
+        </div>
+        <div style={{ fontSize: "13px", color: "#7870a0", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "18px" }}>
+          💡 <em>Tip: Stories with specific numbers — "$X saved", "Y% improvement", "Z people impacted" — are 3× more memorable in interviews.</em>
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button onClick={() => { setMode("interview-pick"); if (profile.resumeText && bulletPoints.length === 0) parseBullets(); }}
+            style={{ ...S.btn, fontSize: "13px", padding: "9px 18px", display: "flex", alignItems: "center", gap: "8px" }}>
+            💬 Tell me a success story
+          </button>
+          {profile.resumeText && (
+            <button onClick={handleExtract}
+              style={{ ...S.btn, background: "#2d4a8a", fontSize: "13px", padding: "9px 18px", display: "flex", alignItems: "center", gap: "8px" }}>
+              📄 Extract from my resume
+            </button>
+          )}
+          <button onClick={() => { setEditing("new"); setMode("edit"); }}
+            style={{ ...S.btnGhost, fontSize: "13px", padding: "9px 18px" }}>
+            ✏️ Write a story manually
+          </button>
+        </div>
+      </div>
+
+      {/* Library */}
+      {stories.length > 0 ? (
+        <>
+          <div style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap", alignItems:"center" }}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search stories…"
+              style={{ ...S.input, width:"200px" }}
+              onFocus={e=>e.target.style.borderColor="#4f6ef7"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />
+            <button onClick={()=>setFilterStarred(!filterStarred)} style={{ ...S.btnGhost, fontSize:"12px", padding:"7px 12px", background:filterStarred?"rgba(99,140,255,0.15)":"transparent", color:filterStarred?"#8aacff":"#8880b8", borderColor:filterStarred?"#4a6abf":"#3a3d5c" }}>
+              ⭐ Starred
+            </button>
+            <div style={{ fontSize:"12px", color:"#6860a0", fontFamily:"'DM Sans', system-ui, sans-serif", marginLeft:"auto" }}>
+              {stories.length} {stories.length === 1 ? "story" : "stories"} · {stories.filter(s=>s.starred).length} starred
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"20px" }}>
+            <CompBadge label="All" active={!filterComp} onClick={()=>setFilterComp(null)} />
+            {COMPETENCIES.map(c=><CompBadge key={c} label={c} active={filterComp===c} onClick={()=>setFilterComp(filterComp===c?null:c)} />)}
+          </div>
+          {filtered.length===0 ? (
+            <div style={{ color:"#6860a0", fontFamily:"'DM Sans', system-ui, sans-serif", fontSize:"14px", padding:"32px", textAlign:"center", border:"1px dashed #2e3050", borderRadius:"8px" }}>
+              No stories match.{" "}
+              <button onClick={()=>{setFilterComp(null);setFilterStarred(false);setSearch("");}} style={{ background:"none", border:"none", color:"#4f6ef7", cursor:"pointer", fontSize:"14px" }}>Clear filters</button>
+            </div>
+          ) : filtered.map(s=><StoryCard key={s.id} story={s} onEdit={s=>{setEditing(s);setMode("edit");}} onDelete={handleDelete} onStar={handleStar} />)}
+        </>
+      ) : (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:"#6860a0", fontFamily:"'DM Sans', system-ui, sans-serif" }}>
+          <div style={{ fontSize:"40px", marginBottom:"12px" }}>📖</div>
+          <div style={{ fontSize:"15px", fontWeight:"600", color:"#9890b8", marginBottom:"8px" }}>Your story library is empty</div>
+          <div style={{ fontSize:"13px", color:"#6860a0" }}>Use the buttons above to add your first story — it takes less than 5 minutes.</div>
+        </div>
+      )}
     </div>
   );
 }
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROFILE SELECTOR
@@ -1689,26 +2067,26 @@ export default function CareerForge() {
   const sessionCost = useSessionCost();
   const apiLocked = useApiLock();
 
-  // Load all data on mount
+  // Load all data on mount — localStorage is synchronous
   useEffect(() => {
     if (sessionStorage.getItem("cf:privacy")) setPrivacyAccepted(true);
-    Promise.all([
-      storageGet("careerforge:profiles"),
-      storageGet("careerforge:activeProfile"),
-      storageGet("careerforge:allStories"),
-      storageGet("careerforge:allCorrections"),
-      storageGet("careerforge:allJDs"),
-      storageGet("careerforge:saveJD"),
-    ]).then(([p, ap, s, c, j, sj]) => {
-      if (p) setProfiles(p);
-      if (ap) setActiveProfileId(ap);
-      if (s) setAllStories(s); else setAllStories({ scott: SEED_STORIES_BY_PROFILE.scott, joshua: [], aaron: [] });
-      if (c) setAllCorrections(c);
-      if (j) setAllJDs(j);
-      const pref = sj !== null ? sj : true;
-      setSaveJD(pref);
-      setLoaded(true);
-    });
+
+    const p  = storageGet("careerforge:profiles");
+    const ap = storageGet("careerforge:activeProfile");
+    const s  = storageGet("careerforge:allStories");
+    const c  = storageGet("careerforge:allCorrections");
+    const j  = storageGet("careerforge:allJDs");
+    const sj = storageGet("careerforge:saveJD");
+
+    if (p)  setProfiles(p);
+    if (ap) setActiveProfileId(ap);
+    if (s)  setAllStories(s);
+    else    setAllStories({ scott: SEED_STORIES_BY_PROFILE.scott, joshua: [], aaron: [] });
+    if (c)  setAllCorrections(c);
+    if (j)  setAllJDs(j);
+    const pref = sj !== null ? sj : true;
+    setSaveJD(pref);
+    setLoaded(true);
   }, []);
 
   // Persist on change
@@ -1784,10 +2162,10 @@ export default function CareerForge() {
   const [researchTriggered, setResearchTriggered] = useState(false);
 
   const tabConfig = [
-    { name: "Library",        status: "ready" },
     { name: "Analyze JD",     status: "ready" },
     { name: "Resume",         status: proceeded || resumeOnly ? "active" : "suggested" },
     { name: "Cover Letter",   status: coverDownloaded ? "done" : resumeDownloaded ? "active" : "suggested" },
+    { name: "My Stories",     status: "ready" },
     { name: "Interview Prep", status: materialsComplete ? "active" : "suggested" },
     { name: "Research",       status: materialsComplete ? "active" : "suggested" },
     { name: "Settings",       status: "ready" },
@@ -1796,7 +2174,7 @@ export default function CareerForge() {
   const starredCount = stories.filter(s => s.starred).length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e8e4f8", fontFamily: "Georgia, 'Times New Roman', serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0f1117", color: "#e8e4f8", fontFamily: "Georgia, 'Times New Roman', serif", display: "flex", flexDirection: "column" }}>
       {!privacyAccepted && <PrivacyGate onAccept={() => { sessionStorage.setItem("cf:privacy","1"); setPrivacyAccepted(true); }} />}
 
       {/* Header */}
@@ -1858,26 +2236,41 @@ export default function CareerForge() {
       </div>
 
       {/* Content */}
-      <div style={{ padding: "32px 40px", maxWidth: "900px" }}>
+      <div style={{ padding: "32px 40px", maxWidth: "900px", paddingBottom: "60px" }}>
         {!loaded ? (
           <div style={{ color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", display: "flex", alignItems: "center", gap: "10px" }}><Spinner />Loading…</div>
-        ) : showUploadGate && activeTab !== "Settings" ? (
-          <ResumeUploadGate
-            profile={profile}
-            onComplete={handleUpdateProfile}
-            onSkip={() => setShowUploadGate(false)}
-          />
         ) : (
           <>
-            {/* No-resume warning banner */}
-            {!profile.resumeUploaded && !showUploadGate && (activeTab === "Resume" || activeTab === "Cover Letter") && (
-              <div style={{ background: "rgba(180,120,40,0.1)", border: "1px solid rgba(180,120,40,0.3)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#b08040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span>⚠ No resume uploaded — outputs will use a generic baseline and may not have your contact info.</span>
-                <button onClick={() => setShowUploadGate(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}>Upload now</button>
+            {/* Upload gate — shown inline at top, never blocks navigation */}
+            {showUploadGate && activeTab !== "Settings" && (
+              <div style={{ marginBottom: "28px" }}>
+                <div style={{ background: "rgba(79,110,247,0.08)", border: "1px solid rgba(79,110,247,0.3)", borderRadius: "10px", padding: "20px 24px", marginBottom: "0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                    <div style={{ fontSize: "15px", fontWeight: "600", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+                      Set up {profile.displayName}'s profile
+                    </div>
+                    <button onClick={() => setShowUploadGate(false)} style={{ background: "none", border: "none", color: "#6860a0", cursor: "pointer", fontSize: "18px", lineHeight: 1 }}>✕</button>
+                  </div>
+                  <ResumeUploadGate
+                    profile={profile}
+                    onComplete={handleUpdateProfile}
+                    onSkip={() => setShowUploadGate(false)}
+                  />
+                </div>
               </div>
             )}
 
-            {activeTab === "Library" && <LibraryTab stories={stories} setStories={setStories} />}
+            {/* No-resume warning banner on Resume/Cover Letter if skipped */}
+            {!profile.resumeUploaded && !showUploadGate && (activeTab === "Resume" || activeTab === "Cover Letter") && (
+              <div style={{ background: "rgba(180,120,40,0.1)", border: "1px solid rgba(180,120,40,0.3)", borderRadius: "6px", padding: "12px 16px", marginBottom: "20px", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "13px", color: "#c89040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>⚠ No resume uploaded — outputs will use a generic baseline and may not include your contact info.</span>
+                <button onClick={() => setShowUploadGate(true)} style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer", fontSize: "12px", textDecoration: "underline", whiteSpace: "nowrap" }}>Upload now</button>
+              </div>
+            )}
+
+            {activeTab === "My Stories" && (
+              <MyStoriesTab profile={profile} stories={stories} setStories={setStories} />
+            )}
             {activeTab === "Analyze JD" && (
               <AnalyzeTab
                 jd={jd} setJd={setJd} stories={stories} profile={profile}

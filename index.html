@@ -3,29 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CareerForge — Job Search Intelligence</title>
-    <meta name="description" content="AI-powered job search platform — story library, JD analysis, resume tailoring, cover letters, and interview prep." />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Netlify Identity Widget -->
+    <title>CareerForge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-    <!-- Google Identity Services (for Drive OAuth) -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // Initialize Netlify Identity with explicit site URL
-      window.netlifyIdentity = window.netlifyIdentity || {};
-      document.addEventListener("DOMContentLoaded", function() {
-        if (window.netlifyIdentity && window.netlifyIdentity.init) {
-          window.netlifyIdentity.init({
-            APIUrl: "https://aicareerforge.netlify.app/.netlify/identity"
-          });
-        }
-      });
+      // Tell the widget which site it belongs to
+      if (window.netlifyIdentity) {
+        window.netlifyIdentity.init({
+          APIUrl: "https://aicareerforge.netlify.app/.netlify/identity"
+        });
+      }
     </script>
   </body>
 </html>

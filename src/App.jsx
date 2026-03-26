@@ -1378,13 +1378,6 @@ function ResearchTab({ company, triggered }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIBRARY TAB
-// ─────────────────────────────────────────────────────────────────────────────
-
-function Tag({ label, color="#3a3d5c", textColor="#8880a0" }) {
-  return <span style={{ background: color, color: textColor, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: "nowrap" }}>{label}</span>;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // STORIES TAB — extract from resume or build via guided interview
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1438,6 +1431,89 @@ Rules:
 
 // MY STORIES — combined library + builder
 // ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+function Tag({ label, color="#3a3d5c", textColor="#8880a0" }) {
+  return <span style={{ background: color, color: textColor, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: "nowrap" }}>{label}</span>;
+}
+
+function CompBadge({ label, active, onClick }) {
+  return <button onClick={onClick} style={{ background: active?"rgba(99,140,255,0.18)":"rgba(255,255,255,0.03)", color: active?"#8aacff":"#5a5870", border: `1px solid ${active?"#4a6abf":"#3a3d5c"}`, borderRadius: "4px", padding: "5px 12px", fontSize: "12px", fontFamily: "'DM Sans', system-ui, sans-serif", cursor: "pointer" }}>{label}</button>;
+}
+
+function StoryCard({ story, onEdit, onDelete, onStar }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{ background: "rgba(255,255,255,0.025)", border: `1px solid ${story.starred?"rgba(99,140,255,0.3)":"#2e3050"}`, borderRadius: "8px", marginBottom: "12px", overflow: "hidden" }}>
+      <div onClick={() => setExpanded(!expanded)} style={{ padding: "16px 20px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: "12px", background: expanded?"rgba(99,140,255,0.04)":"transparent" }}>
+        <button onClick={e => { e.stopPropagation(); onStar(story.id); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", padding: "0", marginTop: "1px", flexShrink: 0 }}>{story.starred?"⭐":"☆"}</button>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "15px", fontWeight: "600", color: "#d8d0f0", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "6px" }}>{story.title}</div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <Tag label={story.company} color="rgba(99,140,255,0.12)" textColor="#7a9aef" />
+            <Tag label={story.role} />
+            {story.competencies.map(c => <Tag key={c} label={c} color="rgba(180,140,255,0.1)" textColor="#b090d0" />)}
+          </div>
+        </div>
+        <div style={{ color: "#3e3a4e", fontSize: "18px", flexShrink: 0 }}>{expanded?"▲":"▼"}</div>
+      </div>
+      {expanded && (
+        <div style={{ padding: "0 20px 20px 48px", borderTop: "1px solid #1a1a2a" }}>
+          {[{l:"S — Situation",k:"situation",c:"#6b8080"},{l:"T — Task",k:"task",c:"#6b7a80"},{l:"A — Action",k:"action",c:"#6b6880"},{l:"R — Result",k:"result",c:"#7a8060"}].map(({l,k,c}) => (
+            <div key={k} style={{ marginTop: "16px" }}>
+              <div style={{ fontSize: "10px", letterSpacing: "2px", textTransform: "uppercase", color: c, fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "600", marginBottom: "6px" }}>{l}</div>
+              <div style={{ fontSize: "14px", lineHeight: "1.7", color: "#b0a8c0", fontFamily: "Georgia, serif" }}>{story[k]}</div>
+            </div>
+          ))}
+          {story.tags?.length > 0 && <div style={{ marginTop: "16px", display: "flex", gap: "6px", flexWrap: "wrap" }}>{story.tags.map(t => <Tag key={t} label={`#${t}`} color="rgba(255,255,255,0.04)" textColor="#8880b8" />)}</div>}
+          <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+            <button onClick={() => onEdit(story)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px" }}>✏️ Edit</button>
+            <button onClick={() => onDelete(story.id)} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", color: "#6a3a3a", borderColor: "#2e1e1e" }}>Delete</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function generateId() { return `story-${Date.now()}-${Math.random().toString(36).slice(2,7)}`; }
+
+function StoryEditor({ story, onSave, onCancel }) {
+  const blank = { id: generateId(), title: "", company: "", role: "", competencies: [], situation: "", task: "", action: "", result: "", tags: "", starred: false };
+  const [form, setForm] = useState(story ? { ...story, tags: story.tags?.join(", ") || "" } : blank);
+  const field = (key, label, multi=false, hint="") => (
+    <div style={{ marginBottom: "18px" }}>
+      <label style={{ ...S.label, color: "#6860a0" }}>{label}{hint&&<span style={{ color: "#3e3a50", marginLeft: "8px", letterSpacing: 0, textTransform: "none", fontSize: "11px" }}>{hint}</span>}</label>
+      {multi ? <textarea value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} rows={4} style={S.textarea} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} /> : <input type="text" value={form[key]} onChange={e => setForm(f=>({...f,[key]:e.target.value}))} style={S.input} onFocus={e=>e.target.style.borderColor="#4a4abf"} onBlur={e=>e.target.style.borderColor="#3a3d5c"} />}
+    </div>
+  );
+  return (
+    <div style={{ background: "#1e2035", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "28px" }}>
+      <div style={{ fontSize: "16px", fontWeight: "600", color: "#e0dcf4", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "24px" }}>{story?"Edit Story":"Add New Story"}</div>
+      {field("title","Story Title")}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}><div>{field("company","Company")}</div><div>{field("role","Role / Title")}</div></div>
+      <div style={{ marginBottom: "18px" }}>
+        <label style={{ ...S.label, color: "#6860a0" }}>Competencies</label>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {COMPETENCIES.map(c => <CompBadge key={c} label={c} active={form.competencies.includes(c)} onClick={() => setForm(f=>({...f,competencies:f.competencies.includes(c)?f.competencies.filter(x=>x!==c):[...f.competencies,c]}))} />)}
+        </div>
+      </div>
+      {field("situation","S — Situation",true,"Context")}
+      {field("task","T — Task",true,"Your responsibility")}
+      {field("action","A — Action",true,"What you did")}
+      {field("result","R — Result",true,"Quantified outcomes")}
+      {field("tags","Tags",false,"comma-separated")}
+      <div style={{ display: "flex", gap: "12px" }}>
+        <button onClick={() => { if(!form.title.trim())return; onSave({...form,tags:form.tags.split(",").map(t=>t.trim()).filter(Boolean)}); }} style={S.btn}>Save Story</button>
+        <button onClick={onCancel} style={S.btnGhost}>Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 function MyStoriesTab({ profile, stories, setStories }) {
   // view | edit | extract | interview-pick | interview-chat | interview-review
@@ -2374,4 +2450,3 @@ export default function CareerForge() {
     </div>
   );
 }
-

@@ -619,26 +619,46 @@ function Board({ cards, onOpenCard, onStageChange, onAddCard, onOpenSearch, onRe
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function scoreJobsAgainstProfile(jobs, profile) {
-  const profileSummary = `Title: ${profile.title || "Enterprise Transformation Leader"}
-Background: ${(profile.background || profile.resumeText || "").slice(0, 400)}`;
+  const resumeSnippet = (profile.resumeText || profile.background || "").slice(0, 600);
+  const profileSummary = `Title: ${profile.title || "Enterprise Transformation Leader"}\nResume: ${resumeSnippet}`;
 
-  const jobList = jobs.slice(0, 20).map((j, i) =>
-    `${i}: ${j.job_title || j.title || "Unknown"} at ${j.company_name || j.company || "Unknown"} — ${(j.job_description || j.description || "").slice(0, 300)}`
-  ).join("\n");
+  // Score up to 50, return all scored (caller takes top 15)
+  const jobsToScore = jobs.slice(0, 50);
+  const jobList = jobsToScore.map((j, i) => {
+    const raw = (j.job_description || j.description || "")
+      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+    return `${i}: ${j.job_title || j.title || "Unknown"} at ${j.company_name || j.company || "Unknown"} | ${raw}`;
+  }).join("\n");
 
   const text = await callClaude(
-    `You are a career matching AI. Score each job 1-10 for fit against this candidate.
-Return ONLY a JSON array: [{"index":0,"score":8,"reason":"one sentence"},...]
-Score all jobs. No preamble.`,
+    `You are a senior recruiter evaluating candidate fit. Score each job 1-10 based ONLY on must-have requirements — ignore preferred/nice-to-have.
+
+Score HIGH when candidate has:
+- Required certifications match (PMP, SAFe, CPA, specific platforms listed as required)
+- Required domain/industry experience (e.g. "manufacturing experience required", "energy sector")
+- Required hands-on tool experience (e.g. "must have NetSuite", "Salesforce admin required")
+- Required org size or leadership scope match
+
+Score LOW when candidate is missing:
+- Explicitly required certifications or licenses
+- Required industry experience they lack
+- Required technical platform hands-on experience
+
+The "reason" field must be specific — name the actual requirement gap or match.
+Example good reasons: "Lacks required SAP hands-on", "PMP + NetSuite match required certs and ERP", "Requires manufacturing domain — not in background"
+Example bad reasons: "Good fit", "Some gaps"
+
+Return ONLY a JSON array: [{"index":0,"score":8,"reason":"specific one sentence"},...]
+Score all ${jobsToScore.length} jobs. No preamble.`,
     `Candidate:\n${profileSummary}\n\nJobs:\n${jobList}`,
-    2000
+    3000
   );
 
   const m = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
   if (!m) return jobs.map(j => ({ ...j, fitScore: 5, fitReason: "" }));
   try {
     const scores = JSON.parse(m[0]);
-    return jobs.slice(0, 20).map((j, i) => {
+    return jobsToScore.map((j, i) => {
       const s = scores.find(x => x.index === i);
       return { ...j, fitScore: s?.score || 5, fitReason: s?.reason || "" };
     });
@@ -740,9 +760,17 @@ function JobResultCard({ job, onAnalyze }) {
             {expanded ? "▲ Hide" : "▼ Preview JD"}
           </button>
           {expanded && jdText && (
-            <div style={{ marginTop: "10px", fontSize: "13px", color: "#c8c4e8", fontFamily: "Georgia, serif", lineHeight: "1.7", background: "#1e2240", borderRadius: "6px", padding: "12px", maxHeight: "200px", overflowY: "auto", whiteSpace: "pre-wrap" }}>
-              {jdText.slice(0, 1200)}{jdText.length > 1200 ? "…" : ""}
-            </div>
+            <div
+              style={{ marginTop: "10px", fontSize: "13px", color: "#c8c4e8", fontFamily: "Georgia, serif", lineHeight: "1.7", background: "#1e2240", borderRadius: "6px", padding: "12px", maxHeight: "200px", overflowY: "auto" }}
+              dangerouslySetInnerHTML={{ __html:
+                jdText.slice(0, 1500)
+                  .replace(/<script[\s\S]*?<\/script>/gi, "")
+                  .replace(/<style[\s\S]*?<\/style>/gi, "")
+                  .replace(/<(?!\/?(b|strong|i|em|ul|ol|li|p|br|h[1-6])\b)[^>]+>/gi, " ")
+                  .replace(/\s{2,}/g, " ")
+                  + (jdText.length > 1500 ? "<br/><em style='color:#6860a0'>… click Analyze for full description</em>" : "")
+              }}
+            />
           )}
         </div>
       </div>
@@ -808,7 +836,7 @@ Return ONLY a JSON array of strings.`,
       const triggerRes = await fetch("/.netlify/functions/searchJobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: activeQuery, days, maxItems: 30 })
+        body: JSON.stringify({ keyword: activeQuery, days, maxItems: 50 })
       });
       const triggerText = await triggerRes.text();
       if (!triggerRes.ok || triggerText.startsWith("<")) {
@@ -890,7 +918,7 @@ Return ONLY a JSON array of strings.`,
       // Score and update — results already visible, scoring just adds fit badges
       setStatus(`Scoring ${deduped.length} jobs against your profile…`);
       const scored = await scoreJobsAgainstProfile(deduped, profile);
-      const top15 = scored.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0)).slice(0, 15);
+      const top15 = scored.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0)).slice(0, 15); // fetch 50, score all, show best 15
       setJobs(top15);
       setStatus(`${top15.length} matches — scored and ranked`);
     } catch (e) {

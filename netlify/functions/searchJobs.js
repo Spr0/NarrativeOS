@@ -6,9 +6,15 @@ export async function handler(event) {
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
 
-  const keyword = body.keyword || "enterprise transformation director";
-  const days = body.days || 3;
-  const maxItems = body.maxItems || 40; // fetch more than 15 to have scoring headroom
+  const keyword = body.keyword || "transformation director";
+  const maxItems = body.maxItems || 30;
+
+  // Build the HiringCafe URL with searchState — this is what the scraper navigates to
+  const searchState = encodeURIComponent(JSON.stringify({
+    query: keyword,
+    workplaceType: "remote",
+    sortBy: "relevance"
+  }));
 
   const res = await fetch(
     `https://api.apify.com/v2/acts/shahidirfan~hiring-cafe-jobs-scraper/runs?token=${process.env.APIFY_TOKEN}`,
@@ -16,9 +22,8 @@ export async function handler(event) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        startUrl: "https://hiring.cafe",
+        startUrl: `https://hiring.cafe/?searchState=${searchState}`,
         keyword,
-        location: "United States",
         workplaceType: "Remote",
         results_wanted: maxItems,
         max_pages: 3,

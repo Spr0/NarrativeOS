@@ -660,8 +660,13 @@ function JobResultCard({ job, onAnalyze }) {
     <div style={{ ...S.section, marginBottom: "10px", padding: "14px 18px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
         <div style={{ flexShrink: 0, width: "42px", height: "42px", borderRadius: "8px", background: `${scoreColor}15`, border: `1.5px solid ${scoreColor}50`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: "15px", fontWeight: "800", color: scoreColor, fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: 1 }}>{score}</span>
-          <span style={{ fontSize: "9px", color: scoreColor, fontFamily: "'DM Sans', system-ui, sans-serif" }}>/10</span>
+          {job.fitScore === null
+            ? <Spinner size={14} />
+            : <>
+                <span style={{ fontSize: "15px", fontWeight: "800", color: scoreColor, fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: 1 }}>{score}</span>
+                <span style={{ fontSize: "9px", color: scoreColor, fontFamily: "'DM Sans', system-ui, sans-serif" }}>/10</span>
+              </>
+          }
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", marginBottom: "4px" }}>
@@ -744,81 +749,90 @@ Return ONLY a JSON array of strings.`,
   const runSearch = async () => {
     if (running || runningRef.current) return;
     runningRef.current = true;
-    setRunning(true); setError(null); setJobs([]); const activeQuery = customQuery.trim() || queries[0] || "transformation director";
-    setStatus(`Searching: "${activeQuery}"…`);
+    setRunning(true); setError(null); setJobs([]);
+    const activeQuery = customQuery.trim() || queries[0] || "transformation director";
+    setStatus(`Starting search for "${activeQuery}"…`);
     try {
-      const activeQueries = customQuery.trim() ? [customQuery.trim(), ...queries] : queries;
-      const allJobs = [];
-
-      for (const keyword of activeQueries.slice(0, 1)) { // run 1 query per search to control cost + speed
-        // Trigger scrape
-        const triggerRes = await fetch("/.netlify/functions/searchJobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword, days, maxItems: 20 })
-        });
-        const triggerText = await triggerRes.text();
-        if (!triggerRes.ok || triggerText.startsWith("<")) {
-          throw new Error(`Function not found (${triggerRes.status}). Check that netlify/functions/searchJobs.js is deployed.`);
-        }
-        const { runId, datasetId: initDatasetId, error: triggerErr } = JSON.parse(triggerText);
-        if (triggerErr) throw new Error(triggerErr);
-        if (!runId) throw new Error("No runId returned from searchJobs function");
-
-        // Incremental fetch — read dataset every 15s while run is in progress
-        const datasetId = initDatasetId;
-        let lastCount = 0;
-        let runDone = false;
-
-        for (let attempt = 0; attempt < 40; attempt++) { // max 10 min
-          await new Promise(r => setTimeout(r, 15000));
-          const elapsed_s = (attempt + 1) * 15;
-
-          // Check if run finished
-          try {
-            const statusRes = await fetch(`/.netlify/functions/fetchJobs?runId=${runId}`);
-            const statusText = await statusRes.text();
-            if (statusRes.ok && !statusText.startsWith("<")) {
-              const { status: runStatus } = JSON.parse(statusText);
-              if (runStatus === "SUCCEEDED" || runStatus === "FAILED" || runStatus === "ABORTED") runDone = true;
-            }
-          } catch { /* transient */ }
-
-          // Fetch current dataset batch
-          try {
-            const fetchRes = await fetch(`/.netlify/functions/fetchJobs?datasetId=${datasetId}`);
-            const fetchText = await fetchRes.text();
-            if (fetchRes.ok && !fetchText.startsWith("<")) {
-              const batch = JSON.parse(fetchText);
-              if (Array.isArray(batch) && batch.length > lastCount) {
-                allJobs.push(...batch.slice(lastCount));
-                lastCount = batch.length;
-                setStatus(`Found ${allJobs.length} jobs… ${runDone ? "scrape done, scoring" : `${elapsed_s}s`}`);
-              } else {
-                setStatus(`Scraping Indeed… ${elapsed_s}s`);
-              }
-            }
-          } catch { /* transient */ }
-
-          if (runDone) break;
-        }
+      // Trigger scrape
+      const triggerRes = await fetch("/.netlify/functions/searchJobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: activeQuery, days, maxItems: 30 })
+      });
+      const triggerText = await triggerRes.text();
+      if (!triggerRes.ok || triggerText.startsWith("<")) {
+        throw new Error(`Function not found (${triggerRes.status}). Check netlify/functions/searchJobs.js is deployed.`);
       }
+      const { runId, datasetId, error: triggerErr } = JSON.parse(triggerText);
+      if (triggerErr) throw new Error(triggerErr);
+      if (!runId) throw new Error("No runId returned");
+
+      // Poll every 10s — show results as soon as any arrive, score when done
+      let lastCount = 0;
+      let allRaw = [];
+      let runDone = false;
+      let startTime = Date.now();
+
+      while (!runDone) {
+        await new Promise(r => setTimeout(r, 10000));
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+        // Check run status (fire-and-forget style, don't block on errors)
+        try {
+          const st = await fetch(`/.netlify/functions/fetchJobs?runId=${runId}`);
+          const stText = await st.text();
+          if (st.ok && !stText.startsWith("<")) {
+            const { status: s } = JSON.parse(stText);
+            if (s === "SUCCEEDED" || s === "FAILED" || s === "ABORTED") runDone = true;
+          }
+        } catch {}
+
+        // Fetch dataset — show whatever exists right now
+        try {
+          const dr = await fetch(`/.netlify/functions/fetchJobs?datasetId=${datasetId}`);
+          const dt = await dr.text();
+          if (dr.ok && !dt.startsWith("<")) {
+            const batch = JSON.parse(dt);
+            if (Array.isArray(batch) && batch.length > lastCount) {
+              allRaw = batch;
+              lastCount = batch.length;
+
+              // Show unscored results immediately so user sees something
+              const unscored = batch.slice(0, 15).map(j => ({ ...j, fitScore: null }));
+              setJobs(unscored);
+              setStatus(runDone
+                ? `${batch.length} jobs found — scoring…`
+                : `${batch.length} jobs found so far… (${elapsed}s)`
+              );
+            } else {
+              setStatus(runDone
+                ? `${lastCount} jobs — scoring…`
+                : `Scraping… ${elapsed}s (${lastCount} found)`
+              );
+            }
+          }
+        } catch {}
+
+        // Safety: stop after 8 min even if not done
+        if (Date.now() - startTime > 480000) break;
+      }
+
+      if (allRaw.length === 0) { setStatus("No results found"); setRunning(false); return; }
 
       // Deduplicate
       const seen = new Set();
-      const deduped = allJobs.filter(j => {
+      const deduped = allRaw.filter(j => {
         const key = `${(j.job_title || j.title || "").toLowerCase()}|${(j.company_name || j.company || "").toLowerCase()}`;
         if (seen.has(key)) return false;
         seen.add(key); return true;
       });
 
-      if (deduped.length === 0) { setStatus("No results found"); setRunning(false); return; }
-
+      // Score and update — results already visible, scoring just adds fit badges
       setStatus(`Scoring ${deduped.length} jobs against your profile…`);
       const scored = await scoreJobsAgainstProfile(deduped, profile);
       const top15 = scored.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0)).slice(0, 15);
       setJobs(top15);
-      setStatus(`${top15.length} matches found`);
+      setStatus(`${top15.length} matches — scored and ranked`);
     } catch (e) {
       setError(e.message);
       setStatus("Search failed");

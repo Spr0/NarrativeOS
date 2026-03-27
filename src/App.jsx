@@ -27,11 +27,8 @@ const DEFAULT_PROFILE = {
   title: "", background: "", resumeText: "", resumeUploaded: false,
 };
 
-const DEFAULT_QUERIES = [
-  "transformation director remote",
-  "PMO director remote",
-  "enterprise technology director",
-];
+// Queries are seeded per-user from their profile — no hardcoded defaults
+const DEFAULT_QUERIES = [];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GLOBAL STATE — session cost + API lock
@@ -778,8 +775,13 @@ function JobResultCard({ job, onAnalyze }) {
   );
 }
 
-function JobSearchTab({ profile, onAnalyzeJD, savedJobs, onSaveJobs }) {
-  const [queries, setQueries] = useState([...DEFAULT_QUERIES]);
+function JobSearchTab({ profile, onAnalyzeJD, savedJobs, onSaveJobs, savedQueries, onSaveQueries }) {
+  const [queries, setQueriesLocal] = useState(savedQueries?.length ? savedQueries : []);
+  const setQueries = (q) => {
+    const val = typeof q === "function" ? q(queries) : q;
+    setQueriesLocal(val);
+    onSaveQueries?.(val);
+  };
   const [customQuery, setCustomQuery] = useState("");
   const [days, setDays] = useState(3);
   const [running, setRunning] = useState(false);
@@ -937,6 +939,11 @@ Return ONLY a JSON array of strings.`,
             {generatingQueries ? <><Spinner size={10} />Generating…</> : "✦ Generate from profile"}
           </button>
         </div>
+        {queries.length === 0 && (
+          <div style={{ fontSize: "13px", color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", padding: "10px 0", marginBottom: "8px" }}>
+            No search queries yet — click "Generate from profile" to create personalized queries based on your resume.
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
           {queries.map((q, i) => (
             <div key={i} style={{ display: "flex", gap: "8px" }}>
@@ -2385,7 +2392,7 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => document.getElementById(`upload-${profile.id}`).click()}
+        onClick={() => document.getElementById("resume-upload-input").click()}
         style={{
           border: `1.5px dashed ${dragOver ? "#4a4abf" : "#2e2e42"}`,
           borderRadius: "6px", padding: "24px", textAlign: "center",
@@ -2394,7 +2401,7 @@ function ResumeUploadGate({ profile, onComplete, onSkip }) {
           transition: "all 0.2s"
         }}
       >
-        <input id={`upload-${profile.id}`} type="file" accept=".docx,.txt" style={{ display: "none" }} onChange={handleFile} />
+        <input id="resume-upload-input" type="file" accept=".docx,.txt" style={{ display: "none" }} onChange={handleFile} />
         <div style={{ fontSize: "24px", marginBottom: "8px" }}>📄</div>
         {fileName
           ? <div style={{ color: "#4a4abf", fontFamily: "'DM Sans', system-ui, sans-serif", fontSize: "14px" }}>✓ {fileName}</div>
@@ -2820,7 +2827,8 @@ export default function CareerForge() {
   // App state
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [cards, setCards] = useState([]); // application cards
-  const [searchJobs, setSearchJobs] = useState([]); // persists search results across nav
+  const [searchJobs, setSearchJobs] = useState([]);
+  const [searchQueries, setSearchQueries] = useState([]); // persists search results across nav
   const [pendingAnalysis, setPendingAnalysis] = useState(null); // jd from search, not yet on board
   const [stories, setStories] = useState([]);
   const [corrections, setCorrections] = useState({});
@@ -2836,6 +2844,8 @@ export default function CareerForge() {
     const s = storageGet(`${userKey}:stories`);
     const cr = storageGet(`${userKey}:corrections`);
     const sj = storageGet(`${userKey}:saveJD`);
+    const sq = storageGet(`${userKey}:searchQueries`);
+    if (sq) setSearchQueries(sq);
 
     if (p) setProfile(p);
     else setProfile({ ...DEFAULT_PROFILE, name: user.user_metadata?.full_name || user.email.split("@")[0], email: user.email, displayName: user.user_metadata?.full_name || user.email });
@@ -2852,6 +2862,7 @@ export default function CareerForge() {
   useEffect(() => { if (loaded && user) storageSet(`${userKey}:stories`, stories); }, [stories, loaded]);
   useEffect(() => { if (loaded && user) storageSet(`${userKey}:corrections`, corrections); }, [corrections, loaded]);
   useEffect(() => { if (loaded && user) storageSet(`${userKey}:saveJD`, saveJD); }, [saveJD, loaded]);
+  useEffect(() => { if (loaded && user) storageSet(`${userKey}:searchQueries`, searchQueries); }, [searchQueries, loaded]);
 
   // Card operations
   const addCard = (cardData) => {
@@ -2955,7 +2966,7 @@ export default function CareerForge() {
                   <button onClick={() => setActiveScreen("board")} style={{ background: "none", border: "none", color: "#6860a0", cursor: "pointer", fontSize: "18px" }}>←</button>
                   <div style={{ fontSize: "20px", fontWeight: "700", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif" }}>Job Search</div>
                 </div>
-                <JobSearchTab profile={profile} onAnalyzeJD={handleAnalyzeFromSearch} savedJobs={searchJobs} onSaveJobs={setSearchJobs} />
+                <JobSearchTab profile={profile} onAnalyzeJD={handleAnalyzeFromSearch} savedJobs={searchJobs} onSaveJobs={setSearchJobs} savedQueries={searchQueries} onSaveQueries={setSearchQueries} />
               </div>
             )}
             {activeScreen === "analyze" && (

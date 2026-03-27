@@ -717,26 +717,39 @@ Return ONLY a JSON array of strings.`,
       const allJobs = [];
 
       for (const keyword of activeQueries.slice(0, 3)) {
+        // Trigger scrape
         const triggerRes = await fetch("/.netlify/functions/searchJobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keyword, days, maxItems: 20 })
         });
-        const { runId, datasetId: initDatasetId, error: triggerErr } = await triggerRes.json();
+        const triggerText = await triggerRes.text();
+        if (!triggerRes.ok || triggerText.startsWith("<")) {
+          throw new Error(`Function not found (${triggerRes.status}). Check that netlify/functions/searchJobs.js is deployed.`);
+        }
+        const { runId, datasetId: initDatasetId, error: triggerErr } = JSON.parse(triggerText);
         if (triggerErr) throw new Error(triggerErr);
+        if (!runId) throw new Error("No runId returned from searchJobs function");
 
+        // Poll for completion
         let datasetId = initDatasetId;
         for (let attempt = 0; attempt < 30; attempt++) {
           await new Promise(r => setTimeout(r, 4000));
           const pollRes = await fetch(`/.netlify/functions/fetchJobs?runId=${runId}`);
-          const { status: runStatus, datasetId: did } = await pollRes.json();
+          const pollText = await pollRes.text();
+          if (!pollRes.ok || pollText.startsWith("<")) break;
+          const { status: runStatus, datasetId: did } = JSON.parse(pollText);
           if (did) datasetId = did;
           if (runStatus === "SUCCEEDED" || runStatus === "FAILED" || runStatus === "ABORTED") break;
         }
 
         if (!datasetId) continue;
+
+        // Fetch results
         const fetchRes = await fetch(`/.netlify/functions/fetchJobs?datasetId=${datasetId}`);
-        const results = await fetchRes.json();
+        const fetchText = await fetchRes.text();
+        if (!fetchRes.ok || fetchText.startsWith("<")) continue;
+        const results = JSON.parse(fetchText);
         if (Array.isArray(results)) allJobs.push(...results);
       }
 

@@ -770,14 +770,18 @@ Return ONLY a JSON array of strings.`,
         let succeeded = false;
         for (let attempt = 0; attempt < 90; attempt++) { // 90 × 4s = 6 min
           const elapsed_s = (attempt + 1) * 4;
-          setStatus(`Scraping Indeed… ${elapsed_s}s (usually 2–3 min)`);
-          await new Promise(r => setTimeout(r, 4000));
-          const pollRes = await fetch(`/.netlify/functions/fetchJobs?runId=${runId}`);
-          const pollText = await pollRes.text();
-          if (!pollRes.ok || pollText.startsWith("<")) break;
-          const { status: runStatus } = JSON.parse(pollText);
-          if (runStatus === "SUCCEEDED") { succeeded = true; break; }
-          if (runStatus === "FAILED" || runStatus === "ABORTED") break;
+          setStatus(`Scraping Indeed… ${elapsed_s}s — usually 2–4 min, please wait`);
+          await new Promise(r => setTimeout(r, 6000));
+          try {
+            const pollRes = await fetch(`/.netlify/functions/fetchJobs?runId=${runId}`);
+            const pollText = await pollRes.text();
+            if (pollRes.ok && !pollText.startsWith("<")) {
+              const { status: runStatus } = JSON.parse(pollText);
+              if (runStatus === "SUCCEEDED") { succeeded = true; break; }
+              if (runStatus === "FAILED" || runStatus === "ABORTED") break;
+            }
+            // Otherwise: Netlify timeout or transient error — keep polling
+          } catch { /* network blip — keep polling */ }
         }
 
         if (!succeeded) {

@@ -664,7 +664,7 @@ function JobResultCard({ job, onAnalyze }) {
             </div>
             <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
               {url && <a href={url} target="_blank" rel="noopener noreferrer" style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px", textDecoration: "none" }}>Apply ↗</a>}
-              <button onClick={() => onAnalyze(jdText, title, company)} style={{ ...S.btn, fontSize: "11px", padding: "4px 12px" }}>Analyze</button>
+              <button onClick={() => onAnalyze(jdText, title, company, job.fitScore, job.fitReason)} style={{ ...S.btn, fontSize: "11px", padding: "4px 12px" }}>Analyze</button>
             </div>
           </div>
           {job.fitReason && <div style={{ fontSize: "12px", color: "#6860a0", fontFamily: "'DM Sans', system-ui, sans-serif", fontStyle: "italic", marginBottom: "4px" }}>{job.fitReason}</div>}
@@ -682,7 +682,7 @@ function JobResultCard({ job, onAnalyze }) {
   );
 }
 
-function JobSearchTab({ profile, onAnalyzeJD }) {
+function JobSearchTab({ profile, onAnalyzeJD, savedJobs, onSaveJobs }) {
   const [queries, setQueries] = useState([...DEFAULT_QUERIES]);
   const [customQuery, setCustomQuery] = useState("");
   const [days, setDays] = useState(3);
@@ -690,7 +690,8 @@ function JobSearchTab({ profile, onAnalyzeJD }) {
   const runningRef = useRef(false);
   const [status, setStatus] = useState("");
   const [elapsed, setElapsed] = useState(0);
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobsLocal] = useState(savedJobs || []);
+  const setJobs = (j) => { setJobsLocal(j); onSaveJobs?.(j); };
   const [error, setError] = useState(null);
   const [generatingQueries, setGeneratingQueries] = useState(false);
   const [abortController, setAbortController] = useState(null);
@@ -2666,6 +2667,7 @@ export default function CareerForge() {
   const [loaded, setLoaded] = useState(false);
   const [activeScreen, setActiveScreen] = useState("board"); // board | search | stories | profile
   const [openCardId, setOpenCardId] = useState(null);
+  const _pendingCard = useRef(null); // holds new card data until setCards re-render settles
   const [saveJD, setSaveJD] = useState(true);
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -2675,6 +2677,7 @@ export default function CareerForge() {
   // App state
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [cards, setCards] = useState([]); // application cards
+  const [searchJobs, setSearchJobs] = useState([]); // persists search results across nav
   const [stories, setStories] = useState([]);
   const [corrections, setCorrections] = useState({});
 
@@ -2716,20 +2719,46 @@ export default function CareerForge() {
   const updateCard = (updated) => setCards(prev => prev.map(c => c.id === updated.id ? updated : c));
   const updateStage = (id, stage) => setCards(prev => prev.map(c => c.id === id ? { ...c, stage } : c));
 
-  const handleAnalyzeFromSearch = (jdText, title, company) => {
-    // Find existing card or create new one
-    const existing = cards.find(c => c.company?.toLowerCase() === company?.toLowerCase() && c.title?.toLowerCase() === title?.toLowerCase());
+  const handleAnalyzeFromSearch = (jdText, title, company, fitScore, fitReason) => {
+    // Check for existing card
+    const existing = cards.find(c =>
+      c.company?.toLowerCase() === company?.toLowerCase() &&
+      c.title?.toLowerCase() === title?.toLowerCase()
+    );
+
     if (existing) {
-      updateCard({ ...existing, jd: jdText });
+      // Update existing card with JD
+      const updated = { ...existing, jd: jdText, fitScore: fitScore || existing.fitScore, fitReason: fitReason || existing.fitReason };
+      updateCard(updated);
+      // Set openCardId — card already in state so find works immediately
       setOpenCardId(existing.id);
     } else {
-      const id = addCard({ title, company, jd: jdText, stage: "Radar" });
-      setOpenCardId(id);
+      // Build new card inline so we can set openCardId before async state settles
+      const newCard = {
+        id: generateId(),
+        stage: "Radar",
+        addedAt: Date.now(),
+        title,
+        company,
+        jd: jdText,
+        fitScore: fitScore || null,
+        fitReason: fitReason || "",
+      };
+      // Add to cards state
+      setCards(prev => [newCard, ...prev]);
+      // Open it — we pass the card directly to avoid find() race condition
+      setOpenCardId(newCard.id);
+      // Store a ref so the workspace can find it even before re-render
+      _pendingCard.current = newCard;
     }
     setActiveScreen("board");
   };
 
-  const openCard = cards.find(c => c.id === openCardId);
+  // Use pendingCard as fallback until setCards async update settles
+  const openCard = cards.find(c => c.id === openCardId) ||
+    (_pendingCard.current?.id === openCardId ? _pendingCard.current : null);
+  // Clear pending ref once card is in state
+  if (openCard && _pendingCard.current?.id === openCard.id) _pendingCard.current = null;
 
   // Auth loading
   if (authLoading) {
@@ -2808,7 +2837,7 @@ export default function CareerForge() {
                   <button onClick={() => setActiveScreen("board")} style={{ background: "none", border: "none", color: "#6860a0", cursor: "pointer", fontSize: "18px" }}>←</button>
                   <div style={{ fontSize: "20px", fontWeight: "700", color: "#e8e4f8", fontFamily: "'DM Sans', system-ui, sans-serif" }}>Job Search</div>
                 </div>
-                <JobSearchTab profile={profile} onAnalyzeJD={handleAnalyzeFromSearch} />
+                <JobSearchTab profile={profile} onAnalyzeJD={handleAnalyzeFromSearch} savedJobs={searchJobs} onSaveJobs={setSearchJobs} />
               </div>
             )}
             {activeScreen === "stories" && (

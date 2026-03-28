@@ -1,8 +1,8 @@
-# CareerForge — AI Job Search Intelligence
+# NarrativeOS — AI Job Search Intelligence
 
 > *Built for a senior transformation leader. Useful for anyone serious about their search.*
 
-CareerForge is a multi-tool AI career platform built with React and the Anthropic Claude API. It combines a persistent STAR story library with four AI-powered job search tools — all driven by a single job description input.
+NarrativeOS is a multi-tool AI career platform built with React and the Anthropic Claude API. It combines a persistent STAR story library with four AI-powered job search tools — all driven by a single job description input.
 
 ---
 
@@ -72,8 +72,8 @@ Multi-user Architecture (in progress)
 ## Setup
 
 ```bash
-git clone https://github.com/Spr0/CareerForge.git
-cd CareerForge
+git clone https://github.com/Spr0/NarrativeOS.git
+cd NarrativeOS
 npm install
 cp .env.example .env.local
 # Add your Anthropic API key to .env.local

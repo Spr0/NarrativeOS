@@ -81,14 +81,22 @@ const satisfiedCount = satisfiedArray.filter(Boolean).length
 const total = satisfiedArray.length || 1
   const score = Math.round((satisfiedCount / total) * 10)
 
-  return {
-    best: res,
-    bestScore: score,
-    keywords: (jdStruct && jdStruct.must_have) ? jdStruct.must_have : [],
-    jdStruct,
-    explain: {
-      coverage: satisfiedCount / total,
-      semanticReasons: semantic.reasons
-    }
-  }
+  const coverage = satisfiedCount / total
+
+const reject =
+  score < 6 ||
+  coverage < 0.6 ||
+  satisfiedCount < 2
+
+return {
+  best: res,
+  bestScore: score,
+  keywords: (jdStruct && jdStruct.must_have) ? jdStruct.must_have : [],
+  jdStruct,
+  explain: {
+    coverage,
+    semanticReasons: semantic.reasons
+  },
+  reject
+}
 }

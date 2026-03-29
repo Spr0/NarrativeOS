@@ -22,11 +22,13 @@ exports.handler = async function (event) {
 
     const data = await response.json()
 
+const text =
+  data?.choices?.[0]?.message?.content ||
+  "No response from OpenAI"
+
 return {
   statusCode: 200,
-  body: JSON.stringify({
-    debug: data
-  })
+  body: JSON.stringify({ text })
 }
   } catch (e) {
     return {

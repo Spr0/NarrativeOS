@@ -1,14 +1,15 @@
 exports.handler = async function (event) {
   try {
     const body = JSON.parse(event.body || "{}")
-    const system = body.system
-    const user = body.user
+
+    const system = body.system || ""
+    const user = body.user || ""
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
@@ -22,19 +23,21 @@ exports.handler = async function (event) {
 
     const data = await response.json()
 
-const text =
-  data?.choices?.[0]?.message?.content ||
-  "No response from OpenAI"
+    // 🔥 DEBUG: return full OpenAI response
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        debug: data
+      })
+    }
 
-return {
-  statusCode: 200,
-  body: JSON.stringify({ text })
-}
   } catch (e) {
     return {
-      statusCode: 500,
+      statusCode: 200,
       body: JSON.stringify({
-        error: e.message || "OpenAI error"
+        debug: {
+          error: e.message || "Function crash"
+        }
       })
     }
   }

@@ -97,17 +97,16 @@ async function validate(resume, jdStruct) {
   return { weights, reasons }
 }
 
-// --- GENERATION ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   const res = await callClaude(
-    "Rewrite resume optimized for ATS. DO NOT invent experience.",
+    "Rewrite resume for ATS. Keep concise. Do NOT exceed original length.",
     `Resume:
-${base}
+${base.slice(0, 2000)}
 
-Job Description:
-${jd}
+Job Requirements:
+${(jdStruct?.must_have || []).join("\n")}
 
-Improve alignment but keep it truthful.`
+Rewrite to better align with these requirements. Keep it concise.`
   )
 
   const truth = await validate(base, jdStruct)
@@ -118,10 +117,8 @@ Improve alignment but keep it truthful.`
   const genScore = gen.weights.reduce((a, b) => a + b, 0)
   const truthScore = truth.weights.reduce((a, b) => a + b, 0)
 
-  // 🔥 BALANCED + FLOOR
   let adjusted = (genScore * 0.7) + (truthScore * 0.3)
 
-  // 🔥 LIGHT penalty (not brutal)
   const critical = jdStruct?.must_have?.slice(0, 2) || []
   critical.forEach((_, i) => {
     if ((truth.weights[i] || 0) === 0) {
@@ -129,7 +126,6 @@ Improve alignment but keep it truthful.`
     }
   })
 
-  // 🔥 MINIMUM FLOOR
   adjusted = Math.max(adjusted, 0.2)
 
   const coverage = adjusted / total

@@ -50,12 +50,12 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION ---
+// --- HYBRID VALIDATION (graded scoring) ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
   if (!requirements.length) {
-    return { satisfied: [], reasons: [] }
+    return { satisfied: [], reasons: [], weights: [] }
   }
 
   const resumeChunks = resume
@@ -72,50 +72,79 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
   const satisfied = []
   const reasons = []
+  const weights = []
 
   for (const req of requirements) {
     const reqEmb = await getEmbedding(req)
 
-    // If embeddings fail → trust LLM
-    if (!reqEmb || !resumeEmbeddings.length) {
+    let bestScore = 0
+
+    // --- EMBEDDING MATCH ---
+    if (reqEmb && resumeEmbeddings.length) {
+      for (const emb of resumeEmbeddings) {
+        const s = cosineSimilarity(emb, reqEmb)
+        if (s > bestScore) bestScore = s
+      }
+    } else {
+      // --- FALLBACK TO LLM ---
       const check = await callClaude(
-        "Answer ONLY true or false: does resume satisfy requirement?",
+        "Classify match as STRONG, WEAK, or NONE",
         `Requirement: ${req}\nResume:\n${resume}`
       )
 
-      const isMatch = check.toLowerCase().includes("true")
+      const text = check.toLowerCase()
 
-      satisfied.push(isMatch)
-      reasons.push("LLM (no embeddings)")
+      if (text.includes("strong")) {
+        satisfied.push(true)
+        reasons.push("LLM strong")
+        weights.push(1)
+      } else if (text.includes("weak")) {
+        satisfied.push(true)
+        reasons.push("Weak match")
+        weights.push(0.5)
+      } else {
+        satisfied.push(false)
+        reasons.push("No match")
+        weights.push(0)
+      }
+
       continue
     }
 
-    let bestScore = 0
-
-    for (const emb of resumeEmbeddings) {
-      const s = cosineSimilarity(emb, reqEmb)
-      if (s > bestScore) bestScore = s
-    }
-
-    // 🔥 Tuned thresholds
-    if (bestScore > 0.75) {
+    // --- GRADED LOGIC ---
+    if (bestScore > 0.80) {
       satisfied.push(true)
-      reasons.push("Strong semantic match")
-    } else {
-      // Always defer to LLM when not strong
+      reasons.push("Strong match")
+      weights.push(1)
+    } else if (bestScore > 0.60) {
       const check = await callClaude(
-        "Answer ONLY true or false: does resume satisfy requirement?",
+        "Classify match as STRONG, WEAK, or NONE",
         `Requirement: ${req}\nResume:\n${resume}`
       )
 
-      const isMatch = check.toLowerCase().includes("true")
+      const text = check.toLowerCase()
 
-      satisfied.push(isMatch)
-      reasons.push("LLM decision")
+      if (text.includes("strong")) {
+        satisfied.push(true)
+        reasons.push("LLM strong")
+        weights.push(1)
+      } else if (text.includes("weak")) {
+        satisfied.push(true)
+        reasons.push("Weak match")
+        weights.push(0.5)
+      } else {
+        satisfied.push(false)
+        reasons.push("No match")
+        weights.push(0)
+      }
+    } else {
+      satisfied.push(false)
+      reasons.push("No match")
+      weights.push(0)
     }
   }
 
-  return { satisfied, reasons }
+  return { satisfied, reasons, weights }
 }
 
 // --- GENERATION WITH FEEDBACK LOOP ---
@@ -125,7 +154,6 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let bestExplain = { coverage: 0, semanticReasons: [] }
 
   for (let i = 0; i < 3; i++) {
-    // 🔥 Identify missing requirements
     let missing = []
 
     if (i > 0 && bestExplain?.semanticReasons?.length) {
@@ -133,7 +161,7 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
 
       reqs.forEach((req, idx) => {
         const reason = bestExplain.semanticReasons[idx] || ""
-        if (!reason.includes("Strong")) {
+        if (!reason.toLowerCase().includes("strong")) {
           missing.push(req)
         }
       })
@@ -150,16 +178,17 @@ ${jd}
 Missing requirements:
 ${missing.join("\n")}
 
-For EACH requirement, ensure the resume clearly demonstrates it with specific experience or results.`
+For EACH requirement, clearly demonstrate it with specific experience or results.`
     )
 
     const semantic = await validateHybrid(res, jdStruct, callClaude)
 
-    const satisfiedArray = semantic?.satisfied || []
-    const satisfiedCount = satisfiedArray.filter(Boolean).length
-    const total = satisfiedArray.length || 1
+    const weights = semantic?.weights || []
+    const total = weights.length || 1
 
-    const coverage = satisfiedCount / total
+    const weightedScore = weights.reduce((sum, w) => sum + w, 0)
+
+    const coverage = weightedScore / total
     const score = Math.round(coverage * 10)
 
     if (score > bestScore) {
@@ -171,7 +200,6 @@ For EACH requirement, ensure the resume clearly demonstrates it with specific ex
       }
     }
 
-    // ✅ Tuned pass condition
     if (score >= 6 && coverage >= 0.6) {
       return {
         best: res,
@@ -187,7 +215,6 @@ For EACH requirement, ensure the resume clearly demonstrates it with specific ex
     }
   }
 
-  // ❌ Final fallback
   return {
     best,
     bestScore,

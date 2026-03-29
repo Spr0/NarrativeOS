@@ -48,7 +48,7 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION ---
+// --- HYBRID VALIDATION (graded + safe) ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
@@ -74,15 +74,16 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
   for (const req of requirements) {
     const reqEmb = await getEmbedding(req)
-
     let bestScore = 0
 
+    // --- EMBEDDING MATCH ---
     if (reqEmb && resumeEmbeddings.length) {
       for (const emb of resumeEmbeddings) {
         const s = cosineSimilarity(emb, reqEmb)
         if (s > bestScore) bestScore = s
       }
     } else {
+      // --- FALLBACK ---
       const check = await callClaude(
         "Classify match as STRONG, WEAK, or NONE",
         `Requirement: ${req}\nResume:\n${resume}`
@@ -107,6 +108,7 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       continue
     }
 
+    // --- GRADED LOGIC ---
     if (bestScore > 0.80) {
       satisfied.push(true)
       reasons.push("Strong match")
@@ -142,7 +144,7 @@ async function validateHybrid(resume, jdStruct, callClaude) {
   return { satisfied, reasons, weights }
 }
 
-// --- GENERATION ---
+// --- GENERATION (truth-constrained) ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
@@ -163,18 +165,35 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
     }
 
     const res = await callClaude(
-      "Rewrite resume optimized for ATS. Explicitly address missing requirements.",
-      `Resume:\n${base}\n\nJD:\n${jd}\n\nMissing:\n${missing.join("\n")}`
+      "Rewrite resume optimized for ATS. DO NOT invent experience. Only use what exists in the original resume.",
+      `Original Resume:
+${base}
+
+Job Description:
+${jd}
+
+Missing requirements:
+${missing.join("\n")}
+
+Improve alignment WITHOUT adding fake experience.`
     )
 
+    // 🔥 TRUTH VALIDATION (original resume)
+    const truthSemantic = await validateHybrid(base, jdStruct, callClaude)
+
+    // 🔥 GENERATED VALIDATION
     const semantic = await validateHybrid(res, jdStruct, callClaude)
 
     const weights = semantic?.weights || []
+    const truthWeights = truthSemantic?.weights || []
+
     const total = weights.length || 1
 
     const weightedScore = weights.reduce((sum, w) => sum + w, 0)
+    const truthScore = truthWeights.reduce((sum, w) => sum + w, 0)
 
-    const coverage = weightedScore / total
+    // 🔥 CRITICAL: prevent hallucination scoring
+    const coverage = Math.min(weightedScore, truthScore) / total
     const score = Math.round(coverage * 10)
 
     if (score > bestScore) {

@@ -50,16 +50,14 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION (chunked matching) ---
+// --- HYBRID VALIDATION (chunked) ---
 async function validateHybrid(resume, jdStruct, callClaude) {
-  const requirements =
-    (jdStruct && jdStruct.must_have) ? jdStruct.must_have : []
+  const requirements = jdStruct?.must_have || []
 
   if (!requirements.length) {
     return { satisfied: [], reasons: [] }
   }
 
-  // Split resume into chunks (critical fix)
   const resumeChunks = resume
     .split("\n")
     .map(s => s.trim())
@@ -84,7 +82,6 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       continue
     }
 
-    // Find best matching chunk
     let bestScore = 0
 
     for (const emb of resumeEmbeddings) {
@@ -99,7 +96,6 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       satisfied.push(false)
       reasons.push("Low similarity")
     } else {
-      // LLM fallback
       const check = await callClaude(
         "Answer ONLY true or false: does resume satisfy requirement?",
         `Requirement: ${req}\nResume:\n${resume}`
@@ -115,16 +111,39 @@ async function validateHybrid(resume, jdStruct, callClaude) {
   return { satisfied, reasons }
 }
 
-// --- GENERATION WITH LOOP ---
+// --- GENERATION WITH FEEDBACK LOOP ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
   let bestExplain = { coverage: 0, semanticReasons: [] }
 
   for (let i = 0; i < 3; i++) {
+    // 🔥 Identify missing requirements from previous attempt
+    let missing = []
+
+    if (i > 0 && bestExplain?.semanticReasons?.length) {
+      const reqs = jdStruct?.must_have || []
+
+      reqs.forEach((req, idx) => {
+        const reason = bestExplain.semanticReasons[idx] || ""
+        if (!reason.includes("Strong")) {
+          missing.push(req)
+        }
+      })
+    }
+
     const res = await callClaude(
-      "Rewrite resume optimized for ATS and job description. Improve missing requirements.",
-      `Resume:\n${base}\n\nJD:\n${jd}`
+      "Rewrite resume optimized for ATS. Explicitly address missing requirements.",
+      `Resume:
+${base}
+
+Job Description:
+${jd}
+
+Missing requirements to include:
+${missing.join("\n")}
+
+Improve alignment specifically for these requirements.`
     )
 
     const semantic = await validateHybrid(res, jdStruct, callClaude)
@@ -146,8 +165,8 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
       }
     }
 
-    // Early exit if strong match
-    if (score >= 7 && coverage >= 0.7) {
+    // ✅ Early exit if strong
+    if (score >= 6 && coverage >= 0.6) {
       return {
         best: res,
         bestScore: score,
@@ -162,13 +181,13 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
     }
   }
 
-  // Fallback (best attempt)
+  // ❌ Final fallback
   return {
     best,
     bestScore,
     keywords: jdStruct?.must_have || [],
     jdStruct,
     explain: bestExplain,
-    reject: bestScore < 6
+    reject: bestScore < 5
   }
 }

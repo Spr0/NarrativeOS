@@ -9,6 +9,7 @@ export default function App() {
   const [jd, setJd] = useState("")
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [stage, setStage] = useState("")
   const [error, setError] = useState(null)
 
   async function callClaude(system, user) {
@@ -34,8 +35,10 @@ export default function App() {
     setResult(null)
 
     try {
+      setStage("Parsing job description...")
       const jdStruct = await parseJD(jd, callClaude)
 
+      setStage("Optimizing resume...")
       const output = await generateResume(
         resume,
         jd,
@@ -45,15 +48,16 @@ export default function App() {
       )
 
       setResult(output)
-    } catch (e) {
-      setError("Generation failed")
+    } catch {
+      setError("Something went wrong")
     } finally {
       setLoading(false)
+      setStage("")
     }
   }
 
-  // 🔥 NEW: Categorize results
-  const getBreakdown = () => {
+  // --- Breakdown logic ---
+  const breakdown = (() => {
     if (!result?.keywords || !result?.explain?.semanticReasons) return null
 
     const matched = []
@@ -63,118 +67,143 @@ export default function App() {
     result.keywords.forEach((req, i) => {
       const reason = result.explain.semanticReasons[i] || ""
 
-      if (reason.toLowerCase().includes("strong")) {
-        matched.push(req)
-      } else if (
-        reason.toLowerCase().includes("weak") ||
-        reason.toLowerCase().includes("loose")
-      ) {
-        partial.push(req)
-      } else {
-        missing.push(req)
-      }
+      if (reason.includes("Strong")) matched.push(req)
+      else if (reason.includes("Weak") || reason.includes("Loose")) partial.push(req)
+      else missing.push(req)
     })
 
     return { matched, partial, missing }
-  }
-
-  const breakdown = getBreakdown()
+  })()
 
   return (
-    <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      <h1>NarrativeOS</h1>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
+      
+      <h1 style={{ marginBottom: 10 }}>NarrativeOS</h1>
 
+      {/* INPUT */}
       <textarea
         placeholder="Paste your resume"
         value={resume}
         onChange={(e) => setResume(e.target.value)}
-        rows={10}
-        style={{ width: "100%", marginBottom: 12 }}
+        rows={8}
+        style={{ width: "100%", marginBottom: 10 }}
       />
 
       <textarea
         placeholder="Paste job description"
         value={jd}
         onChange={(e) => setJd(e.target.value)}
-        rows={10}
-        style={{ width: "100%", marginBottom: 12 }}
+        rows={8}
+        style={{ width: "100%", marginBottom: 10 }}
       />
 
       <button onClick={handleGenerate} disabled={loading}>
-        {loading ? "Generating..." : "Generate Resume"}
+        {loading ? "Working..." : "Analyze Resume"}
       </button>
 
+      {/* PROGRESS */}
+      {loading && (
+        <div style={{ marginTop: 10, color: "#666" }}>
+          {stage}
+        </div>
+      )}
+
+      {/* ERROR */}
       {error && (
         <div style={{ color: "red", marginTop: 10 }}>
           {error}
         </div>
       )}
 
+      {/* RESULTS */}
       {result && (
-        <div style={{ marginTop: 20 }}>
-          {result.reject && (
-            <div style={{ color: "red", marginBottom: 10 }}>
-              Low match — resume not generated
+        <div style={{ marginTop: 30 }}>
+
+          {/* SCORE CARD */}
+          <div style={{
+            padding: 16,
+            borderRadius: 8,
+            background: "#f4f4f4",
+            marginBottom: 20
+          }}>
+            <div style={{ fontSize: 24, fontWeight: "bold" }}>
+              {result.bestScore}/10 Match
             </div>
-          )}
 
-          <div>
-            <strong>Score:</strong> {result.bestScore}/10
+            <div style={{ color: "#666" }}>
+              {Math.round(result.explain.coverage * 100)}% alignment
+            </div>
+
+            {result.reject && (
+              <div style={{ color: "red", marginTop: 8 }}>
+                Low match — consider improving before applying
+              </div>
+            )}
           </div>
 
-          <div>
-            <strong>Coverage:</strong>{" "}
-            {Math.round((result.explain?.coverage || 0) * 100)}%
-          </div>
-
-          {/* 🔥 NEW EXPLAINABILITY UI */}
+          {/* BREAKDOWN */}
           {breakdown && (
-            <div style={{ marginTop: 20 }}>
-              {breakdown.matched.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <strong style={{ color: "green" }}>Matched</strong>
-                  <ul>
-                    {breakdown.matched.map((m, i) => (
-                      <li key={i}>{m}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            <div style={{ display: "flex", gap: 20 }}>
 
-              {breakdown.partial.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <strong style={{ color: "orange" }}>Partial</strong>
-                  <ul>
-                    {breakdown.partial.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* MATCHED */}
+              <div style={{ flex: 1 }}>
+                <h3 style={{ color: "green" }}>Matched</h3>
+                {breakdown.matched.map((m, i) => (
+                  <div key={i}>• {m}</div>
+                ))}
+              </div>
 
-              {breakdown.missing.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <strong style={{ color: "red" }}>Missing</strong>
-                  <ul>
-                    {breakdown.missing.map((m, i) => (
-                      <li key={i}>{m}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* PARTIAL */}
+              <div style={{ flex: 1 }}>
+                <h3 style={{ color: "orange" }}>Partial</h3>
+                {breakdown.partial.map((p, i) => (
+                  <div key={i}>• {p}</div>
+                ))}
+              </div>
+
+              {/* MISSING */}
+              <div style={{ flex: 1 }}>
+                <h3 style={{ color: "red" }}>Missing</h3>
+                {breakdown.missing.map((m, i) => (
+                  <div key={i}>• {m}</div>
+                ))}
+              </div>
+
             </div>
           )}
 
-          <pre
-            style={{
+          {/* ACTION HINT */}
+          {breakdown?.missing?.length > 0 && (
+            <div style={{
+              marginTop: 20,
+              padding: 12,
+              background: "#fff3cd",
+              borderRadius: 6
+            }}>
+              💡 Focus on adding or highlighting:
+              <ul>
+                {breakdown.missing.slice(0, 3).map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* RESUME OUTPUT */}
+          <details style={{ marginTop: 20 }}>
+            <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
+              View optimized resume
+            </summary>
+            <pre style={{
               whiteSpace: "pre-wrap",
-              marginTop: 12,
+              marginTop: 10,
               background: "#f6f6f6",
               padding: 12
-            }}
-          >
-            {result.best}
-          </pre>
+            }}>
+              {result.best}
+            </pre>
+          </details>
+
         </div>
       )}
     </div>

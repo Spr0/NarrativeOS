@@ -124,10 +124,11 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
       const text = check.toLowerCase()
 
-      if (text.includes("strong")) {
-        satisfied.push(true)
-        reasons.push("LLM strong")
-        weights.push(1)
+     if (text.includes("strong")) {
+  satisfied.push(true)
+  reasons.push("LLM strong")
+  weights.push(0.75)
+}
       } else if (text.includes("weak")) {
         satisfied.push(true)
         reasons.push("Weak match")

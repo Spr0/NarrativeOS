@@ -20,9 +20,7 @@ async function getEmbedding(text) {
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0
 
-  let dot = 0
-  let magA = 0
-  let magB = 0
+  let dot = 0, magA = 0, magB = 0
 
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i]
@@ -50,7 +48,7 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION (graded scoring) ---
+// --- HYBRID VALIDATION ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
@@ -79,14 +77,12 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
     let bestScore = 0
 
-    // --- EMBEDDING MATCH ---
     if (reqEmb && resumeEmbeddings.length) {
       for (const emb of resumeEmbeddings) {
         const s = cosineSimilarity(emb, reqEmb)
         if (s > bestScore) bestScore = s
       }
     } else {
-      // --- FALLBACK TO LLM ---
       const check = await callClaude(
         "Classify match as STRONG, WEAK, or NONE",
         `Requirement: ${req}\nResume:\n${resume}`
@@ -97,7 +93,7 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       if (text.includes("strong")) {
         satisfied.push(true)
         reasons.push("LLM strong")
-        weights.push(1)
+        weights.push(0.75)
       } else if (text.includes("weak")) {
         satisfied.push(true)
         reasons.push("Weak match")
@@ -111,7 +107,6 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       continue
     }
 
-    // --- GRADED LOGIC ---
     if (bestScore > 0.80) {
       satisfied.push(true)
       reasons.push("Strong match")
@@ -124,11 +119,10 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
       const text = check.toLowerCase()
 
-     if (text.includes("strong")) {
-  satisfied.push(true)
-  reasons.push("LLM strong")
-  weights.push(0.75)
-}
+      if (text.includes("strong")) {
+        satisfied.push(true)
+        reasons.push("LLM strong")
+        weights.push(0.75)
       } else if (text.includes("weak")) {
         satisfied.push(true)
         reasons.push("Weak match")
@@ -148,7 +142,7 @@ async function validateHybrid(resume, jdStruct, callClaude) {
   return { satisfied, reasons, weights }
 }
 
-// --- GENERATION WITH FEEDBACK LOOP ---
+// --- GENERATION ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
@@ -170,16 +164,7 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
 
     const res = await callClaude(
       "Rewrite resume optimized for ATS. Explicitly address missing requirements.",
-      `Resume:
-${base}
-
-Job Description:
-${jd}
-
-Missing requirements:
-${missing.join("\n")}
-
-For EACH requirement, clearly demonstrate it with specific experience or results.`
+      `Resume:\n${base}\n\nJD:\n${jd}\n\nMissing:\n${missing.join("\n")}`
     )
 
     const semantic = await validateHybrid(res, jdStruct, callClaude)
@@ -203,14 +188,11 @@ For EACH requirement, clearly demonstrate it with specific experience or results
 
     if (score >= 6 && coverage >= 0.6) {
       return {
-        best: res,
-        bestScore: score,
+        best,
+        bestScore,
         keywords: jdStruct?.must_have || [],
         jdStruct,
-        explain: {
-          coverage,
-          semanticReasons: semantic.reasons || []
-        },
+        explain: bestExplain,
         reject: false
       }
     }

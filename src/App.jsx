@@ -9,105 +9,94 @@ export default function App() {
   const [jd, setJd] = useState("")
   const [result, setResult] = useState(null)
   const [improved, setImproved] = useState(null)
+  const [improvedScore, setImprovedScore] = useState(null)
   const [loading, setLoading] = useState(false)
   const [stage, setStage] = useState("")
-  const [error, setError] = useState(null)
 
   async function callClaude(system, user) {
-    try {
-      const res = await fetch("/.netlify/functions/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ system, user })
-      })
+    const res = await fetch("/.netlify/functions/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ system, user })
+    })
 
-      const data = await res.json()
-      return data?.text || ""
-    } catch {
-      return ""
-    }
+    const data = await res.json()
+    return data?.text || ""
   }
 
   const handleGenerate = async () => {
     setLoading(true)
     setResult(null)
     setImproved(null)
+    setImprovedScore(null)
 
-    try {
-      setStage("Analyzing job...")
-      const jdStruct = await parseJD(jd, callClaude)
+    setStage("Analyzing job...")
+    const jdStruct = await parseJD(jd, callClaude)
 
-      setStage("Scoring resume...")
-      const output = await generateResume(
-        resume,
-        jd,
-        [],
-        jdStruct,
-        callClaude
-      )
+    setStage("Scoring resume...")
+    const output = await generateResume(
+      resume,
+      jd,
+      [],
+      jdStruct,
+      callClaude
+    )
 
-      setResult(output)
-    } catch {
-      setError("Error generating")
-    } finally {
-      setLoading(false)
-      setStage("")
-    }
+    setResult(output)
+    setLoading(false)
+    setStage("")
   }
 
-  // 🔥 NEW: Improve resume using gaps
   const handleImprove = async () => {
     if (!result) return
 
     setLoading(true)
     setStage("Improving resume...")
 
-    try {
-      const missing = result.keywords.filter((_, i) =>
-        result.explain.semanticReasons[i] === "None"
-      )
+    const missing = result.keywords.filter((_, i) =>
+      result.explain.semanticReasons[i] === "None"
+    )
 
-      const improvedResume = await callClaude(
-        "Improve resume WITHOUT adding fake experience",
-        `Original Resume:
+    const improvedResume = await callClaude(
+      "Improve resume WITHOUT adding fake experience",
+      `Resume:
 ${resume}
 
-Missing Requirements:
+Missing:
 ${missing.join("\n")}
 
-Instructions:
+Rules:
 - Do NOT invent experience
-- Reframe existing experience to better align
-- Highlight transferable skills
-- Strengthen positioning for these requirements`
-      )
+- Strengthen existing experience
+- Improve alignment`
+    )
 
-      setImproved(improvedResume)
-    } catch {
-      setError("Improve failed")
-    } finally {
-      setLoading(false)
-      setStage("")
-    }
+    setImproved(improvedResume)
+    setLoading(false)
+    setStage("")
   }
 
-  const breakdown = (() => {
-    if (!result?.keywords) return null
+  // 🔥 NEW: Re-score improved resume
+  const handleRescore = async () => {
+    if (!improved) return
 
-    const matched = []
-    const partial = []
-    const missing = []
+    setLoading(true)
+    setStage("Re-scoring improved resume...")
 
-    result.keywords.forEach((req, i) => {
-      const reason = result.explain.semanticReasons[i]
+    const jdStruct = await parseJD(jd, callClaude)
 
-      if (reason === "Strong") matched.push(req)
-      else if (reason === "Weak" || reason === "Loose") partial.push(req)
-      else missing.push(req)
-    })
+    const newScore = await generateResume(
+      improved,
+      jd,
+      [],
+      jdStruct,
+      callClaude
+    )
 
-    return { matched, partial, missing }
-  })()
+    setImprovedScore(newScore)
+    setLoading(false)
+    setStage("")
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 1000, margin: "auto" }}>
@@ -137,41 +126,32 @@ Instructions:
 
       {result && (
         <div style={{ marginTop: 20 }}>
-          <h2>{result.bestScore}/10 Match</h2>
+          <h2>Original Score: {result.bestScore}/10</h2>
 
-          {breakdown && (
-            <div style={{ display: "flex", gap: 20 }}>
-              <div>
-                <h3>Matched</h3>
-                {breakdown.matched.map((m, i) => <div key={i}>{m}</div>)}
-              </div>
-              <div>
-                <h3>Partial</h3>
-                {breakdown.partial.map((p, i) => <div key={i}>{p}</div>)}
-              </div>
-              <div>
-                <h3>Missing</h3>
-                {breakdown.missing.map((m, i) => <div key={i}>{m}</div>)}
-              </div>
-            </div>
-          )}
-
-          {/* 🔥 NEW BUTTON */}
-          <button
-            onClick={handleImprove}
-            style={{ marginTop: 20 }}
-          >
-            Improve Resume (Truthfully)
+          <button onClick={handleImprove}>
+            Improve Resume
           </button>
         </div>
       )}
 
       {improved && (
         <div style={{ marginTop: 20 }}>
-          <h3>Improved Version</h3>
+          <h3>Improved Resume</h3>
           <pre style={{ whiteSpace: "pre-wrap" }}>
             {improved}
           </pre>
+
+          <button onClick={handleRescore}>
+            Re-score Improved Resume
+          </button>
+        </div>
+      )}
+
+      {improvedScore && (
+        <div style={{ marginTop: 20 }}>
+          <h2>
+            Improved Score: {improvedScore.bestScore}/10
+          </h2>
         </div>
       )}
     </div>

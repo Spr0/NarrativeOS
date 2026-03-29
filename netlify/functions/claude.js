@@ -2,8 +2,8 @@ exports.handler = async function (event) {
   try {
     const body = JSON.parse(event.body || "{}")
 
-    const system = body.system || ""
-    const user = body.user || ""
+    const system = body.system || "You are a resume optimization assistant."
+    const user = body.user || "No user input provided."
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -23,21 +23,32 @@ exports.handler = async function (event) {
 
     const data = await response.json()
 
-    // 🔥 DEBUG: return full OpenAI response
+    // 🔍 DEBUG visibility
+    if (!body.system || !body.user) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          error: "Missing system or user input",
+          received: body,
+          openai: data
+        })
+      }
+    }
+
+    const text =
+      data?.choices?.[0]?.message?.content ||
+      "No response from OpenAI"
+
     return {
       statusCode: 200,
-      body: JSON.stringify({
-        debug: data
-      })
+      body: JSON.stringify({ text })
     }
 
   } catch (e) {
     return {
       statusCode: 200,
       body: JSON.stringify({
-        debug: {
-          error: e.message || "Function crash"
-        }
+        error: e.message || "Function error"
       })
     }
   }

@@ -4,41 +4,38 @@ exports.handler = async function (event) {
     const system = body.system
     const user = body.user
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: "claude-3-haiku",
-        max_tokens: 1000,
-        system: system,
+        model: "gpt-4o-mini",
         messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: user }
-            ]
-          }
-        ]
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature: 0.3
       })
     })
 
     const data = await response.json()
 
-    // Return raw for now (debug mode)
+    const text =
+      data?.choices?.[0]?.message?.content ||
+      "No response from OpenAI"
+
     return {
       statusCode: 200,
-      body: JSON.stringify(data)
+      body: JSON.stringify({ text })
     }
 
   } catch (e) {
     return {
       statusCode: 500,
       body: JSON.stringify({
-        error: e.message || "Claude error"
+        error: e.message || "OpenAI error"
       })
     }
   }

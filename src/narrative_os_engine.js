@@ -3,9 +3,7 @@ async function getEmbedding(text) {
   try {
     const res = await fetch("/.netlify/functions/embeddings", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: text })
     })
 
@@ -48,7 +46,7 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION (graded + safe) ---
+// --- HYBRID VALIDATION ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
@@ -76,14 +74,12 @@ async function validateHybrid(resume, jdStruct, callClaude) {
     const reqEmb = await getEmbedding(req)
     let bestScore = 0
 
-    // --- EMBEDDING MATCH ---
     if (reqEmb && resumeEmbeddings.length) {
       for (const emb of resumeEmbeddings) {
         const s = cosineSimilarity(emb, reqEmb)
         if (s > bestScore) bestScore = s
       }
     } else {
-      // --- FALLBACK ---
       const check = await callClaude(
         "Classify match as STRONG, WEAK, or NONE",
         `Requirement: ${req}\nResume:\n${resume}`
@@ -108,7 +104,6 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       continue
     }
 
-    // --- GRADED LOGIC ---
     if (bestScore > 0.80) {
       satisfied.push(true)
       reasons.push("Strong match")
@@ -144,7 +139,7 @@ async function validateHybrid(resume, jdStruct, callClaude) {
   return { satisfied, reasons, weights }
 }
 
-// --- GENERATION (truth-constrained) ---
+// --- GENERATION WITH BALANCED TRUTH SCORING ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
@@ -178,10 +173,8 @@ ${missing.join("\n")}
 Improve alignment WITHOUT adding fake experience.`
     )
 
-    // 🔥 TRUTH VALIDATION (original resume)
+    // --- VALIDATION ---
     const truthSemantic = await validateHybrid(base, jdStruct, callClaude)
-
-    // 🔥 GENERATED VALIDATION
     const semantic = await validateHybrid(res, jdStruct, callClaude)
 
     const weights = semantic?.weights || []
@@ -192,8 +185,10 @@ Improve alignment WITHOUT adding fake experience.`
     const weightedScore = weights.reduce((sum, w) => sum + w, 0)
     const truthScore = truthWeights.reduce((sum, w) => sum + w, 0)
 
-    // 🔥 CRITICAL: prevent hallucination scoring
-    const coverage = Math.min(weightedScore, truthScore) / total
+    // 🔥 BALANCED SCORING (fix for 1/10 issue)
+    const adjustedScore = (weightedScore * 0.7) + (truthScore * 0.3)
+
+    const coverage = adjustedScore / total
     const score = Math.round(coverage * 10)
 
     if (score > bestScore) {

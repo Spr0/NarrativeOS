@@ -27,7 +27,7 @@ export default function App() {
   const [jd, setJD] = useState("")
   const [output, setOutput] = useState("")
   const [score, setScore] = useState(null)
-  const [explain, setExplain] = useState(null)
+  const [explain, setExplain] = useState({ coverage: 0, semanticReasons: [] })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [jdCache, setJdCache] = useState({})
@@ -54,9 +54,11 @@ export default function App() {
         callClaude
       )
 
-      setOutput(result.best)
-      setScore(result.bestScore)
-      setExplain(result.explain)
+      setOutput(result?.best || "")
+      setScore(result?.bestScore ?? null)
+      setExplain(
+        result?.explain || { coverage: 0, semanticReasons: [] }
+      )
 
     } catch (e) {
       setError(e.message || "Failed")
@@ -66,8 +68,8 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 900, margin: "auto" }}>
-      <h2>NarrativeOS — ATS Engine</h2>
+    <div style={{ padding: 20 }}>
+      <h2>NarrativeOS</h2>
 
       <textarea
         placeholder="Paste resume"
@@ -87,19 +89,27 @@ export default function App() {
         {loading ? "Generating..." : "Generate"}
       </button>
 
-      {error && <div style={{ color: "red" }}>{error}</div>}
+      {error && (
+        <div style={{ color: "red", marginTop: 10 }}>
+          {error}
+        </div>
+      )}
 
-      {score && <div>Score: {score}/10</div>}
-
-      {explain && (
+      {score !== null && (
         <div style={{ marginTop: 10 }}>
-          <div>Coverage: {(explain.coverage * 100).toFixed(0)}%</div>
+          Score: {score}/10
+        </div>
+      )}
 
-          {explain.missingRequirements.length > 0 && (
-            <div style={{ color: "orange" }}>
-              Missing: {explain.missingRequirements.slice(0,3).join(", ")}
-            </div>
-          )}
+      {typeof explain?.coverage === "number" && (
+        <div>
+          Coverage: {(explain.coverage * 100).toFixed(0)}%
+        </div>
+      )}
+
+      {explain?.semanticReasons?.length > 0 && (
+        <div style={{ fontSize: 12, color: "#666" }}>
+          {explain.semanticReasons.slice(0, 3).join(" | ")}
         </div>
       )}
 
@@ -109,4 +119,3 @@ export default function App() {
     </div>
   )
 }
-

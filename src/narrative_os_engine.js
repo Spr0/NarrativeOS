@@ -1,5 +1,9 @@
-// --- EMBEDDINGS ---
+// --- SIMPLE CACHE (in-memory) ---
+const embeddingCache = new Map()
+
 async function getEmbedding(text) {
+  if (embeddingCache.has(text)) return embeddingCache.get(text)
+
   try {
     const res = await fetch("/.netlify/functions/embeddings", {
       method: "POST",
@@ -8,13 +12,17 @@ async function getEmbedding(text) {
     })
 
     const data = await res.json()
-    return data?.embedding || null
+    const emb = data?.embedding || null
+
+    if (emb) embeddingCache.set(text, emb)
+
+    return emb
   } catch {
     return null
   }
 }
 
-// --- COSINE SIMILARITY ---
+// --- COSINE ---
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0
 
@@ -46,12 +54,12 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION ---
+// --- HYBRID VALIDATION (FAST) ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
   if (!requirements.length) {
-    return { satisfied: [], reasons: [], weights: [] }
+    return { reasons: [], weights: [] }
   }
 
   const resumeChunks = resume
@@ -59,19 +67,22 @@ async function validateHybrid(resume, jdStruct, callClaude) {
     .map(s => s.trim())
     .filter(Boolean)
 
-  const resumeEmbeddings = []
+  // ⚡ PARALLEL embeddings
+  const resumeEmbeddings = (await Promise.all(
+    resumeChunks.map(getEmbedding)
+  )).filter(Boolean)
 
-  for (const chunk of resumeChunks) {
-    const emb = await getEmbedding(chunk)
-    if (emb) resumeEmbeddings.push(emb)
-  }
+  const reqEmbeddings = await Promise.all(
+    requirements.map(getEmbedding)
+  )
 
-  const satisfied = []
   const reasons = []
   const weights = []
 
-  for (const req of requirements) {
-    const reqEmb = await getEmbedding(req)
+  for (let i = 0; i < requirements.length; i++) {
+    const req = requirements[i]
+    const reqEmb = reqEmbeddings[i]
+
     let bestScore = 0
 
     if (reqEmb && resumeEmbeddings.length) {
@@ -79,34 +90,10 @@ async function validateHybrid(resume, jdStruct, callClaude) {
         const s = cosineSimilarity(emb, reqEmb)
         if (s > bestScore) bestScore = s
       }
-    } else {
-      const check = await callClaude(
-        "Classify match as STRONG, WEAK, or NONE",
-        `Requirement: ${req}\nResume:\n${resume}`
-      )
-
-      const text = check.toLowerCase()
-
-      if (text.includes("strong")) {
-        satisfied.push(true)
-        reasons.push("LLM strong")
-        weights.push(0.75)
-      } else if (text.includes("weak")) {
-        satisfied.push(true)
-        reasons.push("Weak match")
-        weights.push(0.5)
-      } else {
-        satisfied.push(false)
-        reasons.push("No match")
-        weights.push(0)
-      }
-
-      continue
     }
 
     if (bestScore > 0.80) {
-      satisfied.push(true)
-      reasons.push("Strong match")
+      reasons.push("Strong")
       weights.push(1)
     } else if (bestScore > 0.60) {
       const check = await callClaude(
@@ -117,29 +104,25 @@ async function validateHybrid(resume, jdStruct, callClaude) {
       const text = check.toLowerCase()
 
       if (text.includes("strong")) {
-        satisfied.push(true)
         reasons.push("LLM strong")
         weights.push(0.75)
       } else if (text.includes("weak")) {
-        satisfied.push(true)
-        reasons.push("Weak match")
+        reasons.push("Weak")
         weights.push(0.5)
       } else {
-        satisfied.push(false)
-        reasons.push("No match")
+        reasons.push("None")
         weights.push(0)
       }
     } else {
-      satisfied.push(false)
-      reasons.push("No match")
+      reasons.push("None")
       weights.push(0)
     }
   }
 
-  return { satisfied, reasons, weights }
+  return { reasons, weights }
 }
 
-// --- GENERATION WITH BALANCED TRUTH SCORING ---
+// --- GENERATION ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
@@ -160,43 +143,39 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
     }
 
     const res = await callClaude(
-      "Rewrite resume optimized for ATS. DO NOT invent experience. Only use what exists in the original resume.",
-      `Original Resume:
-${base}
-
-Job Description:
-${jd}
-
-Missing requirements:
-${missing.join("\n")}
-
-Improve alignment WITHOUT adding fake experience.`
+      "Rewrite resume optimized for ATS. DO NOT invent experience.",
+      `Original Resume:\n${base}\n\nJD:\n${jd}\n\nMissing:\n${missing.join("\n")}`
     )
 
-    // --- VALIDATION ---
-    const truthSemantic = await validateHybrid(base, jdStruct, callClaude)
-    const semantic = await validateHybrid(res, jdStruct, callClaude)
+    const truth = await validateHybrid(base, jdStruct, callClaude)
+    const gen = await validateHybrid(res, jdStruct, callClaude)
 
-    const weights = semantic?.weights || []
-    const truthWeights = truthSemantic?.weights || []
+    const total = gen.weights.length || 1
 
-    const total = weights.length || 1
+    const genScore = gen.weights.reduce((a, b) => a + b, 0)
+    const truthScore = truth.weights.reduce((a, b) => a + b, 0)
 
-    const weightedScore = weights.reduce((sum, w) => sum + w, 0)
-    const truthScore = truthWeights.reduce((sum, w) => sum + w, 0)
+    // ⚖️ Balanced scoring
+    let adjusted = (genScore * 0.7) + (truthScore * 0.3)
 
-    // 🔥 BALANCED SCORING (fix for 1/10 issue)
-    const adjustedScore = (weightedScore * 0.7) + (truthScore * 0.3)
+    // 🔥 MUST-HAVE PENALTIES
+    const critical = jdStruct?.must_have?.slice(0, 2) || []
 
-    const coverage = adjustedScore / total
-    const score = Math.round(coverage * 10)
+    critical.forEach((_, i) => {
+      if ((truth.weights[i] || 0) === 0) {
+        adjusted -= 0.5
+      }
+    })
+
+    const coverage = adjusted / total
+    const score = Math.max(0, Math.round(coverage * 10))
 
     if (score > bestScore) {
       best = res
       bestScore = score
       bestExplain = {
         coverage,
-        semanticReasons: semantic.reasons || []
+        semanticReasons: gen.reasons
       }
     }
 

@@ -66,37 +66,60 @@ async function validateHybrid(resume, jdStruct, callClaude) {
   return { satisfied, reasons }
 }
 
-// --- GENERATION ---
+// --- GENERATION (with regeneration loop) ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
-  const res = await callClaude(
-    "Rewrite resume optimized for ATS and job description",
-    `Resume:\n${base}\n\nJD:\n${jd}`
-  )
+  let best = ""
+  let bestScore = 0
+  let bestExplain = null
 
-  const semantic = await validateHybrid(res, jdStruct, callClaude)
+  for (let i = 0; i < 3; i++) {
+    const res = await callClaude(
+      "Rewrite resume optimized for ATS and job description. Improve missing requirements.",
+      `Resume:\n${base}\n\nJD:\n${jd}`
+    )
 
-  const satisfiedArray = semantic?.satisfied || []
+    const semantic = await validateHybrid(res, jdStruct, callClaude)
 
-const satisfiedCount = satisfiedArray.filter(Boolean).length
-const total = satisfiedArray.length || 1
-  const score = Math.round((satisfiedCount / total) * 10)
+    const satisfiedArray = semantic?.satisfied || []
+    const satisfiedCount = satisfiedArray.filter(Boolean).length
+    const total = satisfiedArray.length || 1
 
-  const coverage = satisfiedCount / total
+    const coverage = satisfiedCount / total
+    const score = Math.round(coverage * 10)
 
-const reject =
-  score < 6 ||
-  coverage < 0.6 ||
-  satisfiedCount < 2
+    // track best attempt
+    if (score > bestScore) {
+      best = res
+      bestScore = score
+      bestExplain = {
+        coverage,
+        semanticReasons: semantic.reasons
+      }
+    }
 
-return {
-  best: res,
-  bestScore: score,
-  keywords: (jdStruct && jdStruct.must_have) ? jdStruct.must_have : [],
-  jdStruct,
-  explain: {
-    coverage,
-    semanticReasons: semantic.reasons
-  },
-  reject
-}
+    // ✅ early exit if good enough
+    if (score >= 7 && coverage >= 0.7) {
+      return {
+        best: res,
+        bestScore: score,
+        keywords: jdStruct?.must_have || [],
+        jdStruct,
+        explain: {
+          coverage,
+          semanticReasons: semantic.reasons
+        },
+        reject: false
+      }
+    }
+  }
+
+  // ❌ fallback (best attempt)
+  return {
+    best,
+    bestScore,
+    keywords: jdStruct?.must_have || [],
+    jdStruct,
+    explain: bestExplain || { coverage: 0, semanticReasons: [] },
+    reject: bestScore < 6
+  }
 }

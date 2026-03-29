@@ -8,6 +8,7 @@ export default function App() {
   const [resume, setResume] = useState("")
   const [jd, setJd] = useState("")
   const [result, setResult] = useState(null)
+  const [improved, setImproved] = useState(null)
   const [loading, setLoading] = useState(false)
   const [stage, setStage] = useState("")
   const [error, setError] = useState(null)
@@ -28,17 +29,15 @@ export default function App() {
   }
 
   const handleGenerate = async () => {
-    if (!resume || !jd) return
-
     setLoading(true)
-    setError(null)
     setResult(null)
+    setImproved(null)
 
     try {
-      setStage("Parsing job description...")
+      setStage("Analyzing job...")
       const jdStruct = await parseJD(jd, callClaude)
 
-      setStage("Optimizing resume...")
+      setStage("Scoring resume...")
       const output = await generateResume(
         resume,
         jd,
@@ -49,26 +48,61 @@ export default function App() {
 
       setResult(output)
     } catch {
-      setError("Something went wrong")
+      setError("Error generating")
     } finally {
       setLoading(false)
       setStage("")
     }
   }
 
-  // --- Breakdown logic ---
+  // 🔥 NEW: Improve resume using gaps
+  const handleImprove = async () => {
+    if (!result) return
+
+    setLoading(true)
+    setStage("Improving resume...")
+
+    try {
+      const missing = result.keywords.filter((_, i) =>
+        result.explain.semanticReasons[i] === "None"
+      )
+
+      const improvedResume = await callClaude(
+        "Improve resume WITHOUT adding fake experience",
+        `Original Resume:
+${resume}
+
+Missing Requirements:
+${missing.join("\n")}
+
+Instructions:
+- Do NOT invent experience
+- Reframe existing experience to better align
+- Highlight transferable skills
+- Strengthen positioning for these requirements`
+      )
+
+      setImproved(improvedResume)
+    } catch {
+      setError("Improve failed")
+    } finally {
+      setLoading(false)
+      setStage("")
+    }
+  }
+
   const breakdown = (() => {
-    if (!result?.keywords || !result?.explain?.semanticReasons) return null
+    if (!result?.keywords) return null
 
     const matched = []
     const partial = []
     const missing = []
 
     result.keywords.forEach((req, i) => {
-      const reason = result.explain.semanticReasons[i] || ""
+      const reason = result.explain.semanticReasons[i]
 
-      if (reason.includes("Strong")) matched.push(req)
-      else if (reason.includes("Weak") || reason.includes("Loose")) partial.push(req)
+      if (reason === "Strong") matched.push(req)
+      else if (reason === "Weak" || reason === "Loose") partial.push(req)
       else missing.push(req)
     })
 
@@ -76,13 +110,11 @@ export default function App() {
   })()
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
-      
-      <h1 style={{ marginBottom: 10 }}>NarrativeOS</h1>
+    <div style={{ padding: 24, maxWidth: 1000, margin: "auto" }}>
+      <h1>NarrativeOS</h1>
 
-      {/* INPUT */}
       <textarea
-        placeholder="Paste your resume"
+        placeholder="Resume"
         value={resume}
         onChange={(e) => setResume(e.target.value)}
         rows={8}
@@ -90,120 +122,56 @@ export default function App() {
       />
 
       <textarea
-        placeholder="Paste job description"
+        placeholder="Job Description"
         value={jd}
         onChange={(e) => setJd(e.target.value)}
         rows={8}
         style={{ width: "100%", marginBottom: 10 }}
       />
 
-      <button onClick={handleGenerate} disabled={loading}>
-        {loading ? "Working..." : "Analyze Resume"}
+      <button onClick={handleGenerate}>
+        Analyze Resume
       </button>
 
-      {/* PROGRESS */}
-      {loading && (
-        <div style={{ marginTop: 10, color: "#666" }}>
-          {stage}
-        </div>
-      )}
+      {loading && <div>{stage}</div>}
 
-      {/* ERROR */}
-      {error && (
-        <div style={{ color: "red", marginTop: 10 }}>
-          {error}
-        </div>
-      )}
-
-      {/* RESULTS */}
       {result && (
-        <div style={{ marginTop: 30 }}>
+        <div style={{ marginTop: 20 }}>
+          <h2>{result.bestScore}/10 Match</h2>
 
-          {/* SCORE CARD */}
-          <div style={{
-            padding: 16,
-            borderRadius: 8,
-            background: "#f4f4f4",
-            marginBottom: 20
-          }}>
-            <div style={{ fontSize: 24, fontWeight: "bold" }}>
-              {result.bestScore}/10 Match
-            </div>
-
-            <div style={{ color: "#666" }}>
-              {Math.round(result.explain.coverage * 100)}% alignment
-            </div>
-
-            {result.reject && (
-              <div style={{ color: "red", marginTop: 8 }}>
-                Low match — consider improving before applying
-              </div>
-            )}
-          </div>
-
-          {/* BREAKDOWN */}
           {breakdown && (
             <div style={{ display: "flex", gap: 20 }}>
-
-              {/* MATCHED */}
-              <div style={{ flex: 1 }}>
-                <h3 style={{ color: "green" }}>Matched</h3>
-                {breakdown.matched.map((m, i) => (
-                  <div key={i}>• {m}</div>
-                ))}
+              <div>
+                <h3>Matched</h3>
+                {breakdown.matched.map((m, i) => <div key={i}>{m}</div>)}
               </div>
-
-              {/* PARTIAL */}
-              <div style={{ flex: 1 }}>
-                <h3 style={{ color: "orange" }}>Partial</h3>
-                {breakdown.partial.map((p, i) => (
-                  <div key={i}>• {p}</div>
-                ))}
+              <div>
+                <h3>Partial</h3>
+                {breakdown.partial.map((p, i) => <div key={i}>{p}</div>)}
               </div>
-
-              {/* MISSING */}
-              <div style={{ flex: 1 }}>
-                <h3 style={{ color: "red" }}>Missing</h3>
-                {breakdown.missing.map((m, i) => (
-                  <div key={i}>• {m}</div>
-                ))}
+              <div>
+                <h3>Missing</h3>
+                {breakdown.missing.map((m, i) => <div key={i}>{m}</div>)}
               </div>
-
             </div>
           )}
 
-          {/* ACTION HINT */}
-          {breakdown?.missing?.length > 0 && (
-            <div style={{
-              marginTop: 20,
-              padding: 12,
-              background: "#fff3cd",
-              borderRadius: 6
-            }}>
-              💡 Focus on adding or highlighting:
-              <ul>
-                {breakdown.missing.slice(0, 3).map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* 🔥 NEW BUTTON */}
+          <button
+            onClick={handleImprove}
+            style={{ marginTop: 20 }}
+          >
+            Improve Resume (Truthfully)
+          </button>
+        </div>
+      )}
 
-          {/* RESUME OUTPUT */}
-          <details style={{ marginTop: 20 }}>
-            <summary style={{ cursor: "pointer", fontWeight: "bold" }}>
-              View optimized resume
-            </summary>
-            <pre style={{
-              whiteSpace: "pre-wrap",
-              marginTop: 10,
-              background: "#f6f6f6",
-              padding: 12
-            }}>
-              {result.best}
-            </pre>
-          </details>
-
+      {improved && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Improved Version</h3>
+          <pre style={{ whiteSpace: "pre-wrap" }}>
+            {improved}
+          </pre>
         </div>
       )}
     </div>

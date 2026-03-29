@@ -48,7 +48,7 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- VALIDATION ---
+// --- VALIDATION (FAST: 1 LLM CALL TOTAL) ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
@@ -61,15 +61,37 @@ async function validateHybrid(resume, jdStruct, callClaude) {
     .map(s => s.trim())
     .filter(Boolean)
 
+  // ⚡ batch embeddings
   const resumeEmbeddings = (await getEmbeddingsBatch(resumeChunks)).filter(Boolean)
   const reqEmbeddings = await getEmbeddingsBatch(requirements)
+
+  // 🔥 SINGLE LLM CALL
+  let llmResults = []
+  try {
+    const response = await callClaude(
+      "For each requirement, return STRONG, WEAK, or NONE as a JSON array.",
+      `Requirements:
+${requirements.join("\n")}
+
+Resume:
+${resume}
+
+Return ONLY JSON like:
+["STRONG","WEAK","NONE"]`
+    )
+
+    const match = response.match(/\[[\s\S]*\]/)
+    llmResults = match ? JSON.parse(match[0]) : []
+  } catch {
+    llmResults = []
+  }
 
   const reasons = []
   const weights = []
 
   for (let i = 0; i < requirements.length; i++) {
-    const req = requirements[i]
     const reqEmb = reqEmbeddings[i]
+    const llmLabel = (llmResults[i] || "").toLowerCase()
 
     let bestScore = 0
 
@@ -83,27 +105,17 @@ async function validateHybrid(resume, jdStruct, callClaude) {
     if (bestScore > 0.80) {
       reasons.push("Strong")
       weights.push(1)
-    } else if (bestScore > 0.60) {
-      const check = await callClaude(
-        "Classify match as STRONG, WEAK, or NONE",
-        `Requirement: ${req}\nResume:\n${resume}`
-      )
-
-      const text = check.toLowerCase()
-
-      if (text.includes("strong")) {
+    } else {
+      if (llmLabel.includes("strong")) {
         reasons.push("LLM strong")
         weights.push(0.75)
-      } else if (text.includes("weak")) {
+      } else if (llmLabel.includes("weak")) {
         reasons.push("Weak")
         weights.push(0.5)
       } else {
         reasons.push("None")
         weights.push(0)
       }
-    } else {
-      reasons.push("None")
-      weights.push(0)
     }
   }
 
@@ -132,7 +144,16 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
 
     const res = await callClaude(
       "Rewrite resume optimized for ATS. DO NOT invent experience.",
-      `Original Resume:\n${base}\n\nJD:\n${jd}\n\nMissing:\n${missing.join("\n")}`
+      `Original Resume:
+${base}
+
+Job Description:
+${jd}
+
+Missing requirements:
+${missing.join("\n")}
+
+Improve alignment WITHOUT adding fake experience.`
     )
 
     const truth = await validateHybrid(base, jdStruct, callClaude)
@@ -143,11 +164,11 @@ export async function generateResume(base, jd, stories, jdStruct, callClaude) {
     const genScore = gen.weights.reduce((a, b) => a + b, 0)
     const truthScore = truth.weights.reduce((a, b) => a + b, 0)
 
+    // ⚖️ balanced scoring
     let adjusted = (genScore * 0.7) + (truthScore * 0.3)
 
-    // 🔥 MUST-HAVE PENALTY
+    // 🔥 must-have penalty
     const critical = jdStruct?.must_have?.slice(0, 2) || []
-
     critical.forEach((_, i) => {
       if ((truth.weights[i] || 0) === 0) {
         adjusted -= 0.5

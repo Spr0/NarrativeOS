@@ -11,23 +11,38 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // ✅ FIXED Claude call
+  // 🔥 BULLETPROOF CALL
   async function callClaude(system, user) {
+    if (!system || !user) {
+      console.warn("Claude called with missing input", { system, user })
+      return ""
+    }
+
     try {
+      const payload = {
+        system: String(system),
+        user: String(user)
+      }
+
+      console.log("Sending to Claude:", payload)
+
       const res = await fetch("/.netlify/functions/claude", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          system,
-          user
-        })
+        body: JSON.stringify(payload)
       })
 
-      const data = await res.json()
+      const text = await res.text()
 
-      return data?.text || ""
+      try {
+        const data = JSON.parse(text)
+        return data?.text || ""
+      } catch {
+        console.error("Non-JSON response:", text)
+        return ""
+      }
     } catch (e) {
       console.error("Claude error:", e)
       return ""
@@ -42,10 +57,13 @@ export default function App() {
     setResult(null)
 
     try {
-      // 1. Parse JD
+      console.log("STARTING GENERATION")
+
+      // 🔥 ensure JD parsing gets valid input
       const jdStruct = await parseJD(jd, callClaude)
 
-      // 2. Generate + score
+      console.log("JD STRUCT:", jdStruct)
+
       const output = await generateResume(
         resume,
         jd,
@@ -53,6 +71,8 @@ export default function App() {
         jdStruct,
         callClaude
       )
+
+      console.log("RESULT:", output)
 
       setResult(output)
     } catch (e) {

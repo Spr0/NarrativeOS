@@ -16,13 +16,11 @@ async function getEmbedding(text) {
   }
 }
 
-// --- COSINE SIMILARITY ---
+// --- COSINE ---
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0
 
-  let dot = 0
-  let magA = 0
-  let magB = 0
+  let dot = 0, magA = 0, magB = 0
 
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i]
@@ -35,7 +33,7 @@ function cosineSimilarity(a, b) {
   return dot / (Math.sqrt(magA) * Math.sqrt(magB))
 }
 
-// --- JD PARSING ---
+// --- JD PARSE ---
 export async function parseJD(jd, callClaude) {
   try {
     const res = await callClaude(
@@ -50,7 +48,7 @@ export async function parseJD(jd, callClaude) {
   }
 }
 
-// --- HYBRID VALIDATION (chunked) ---
+// --- HYBRID VALIDATION ---
 async function validateHybrid(resume, jdStruct, callClaude) {
   const requirements = jdStruct?.must_have || []
 
@@ -77,25 +75,32 @@ async function validateHybrid(resume, jdStruct, callClaude) {
     const reqEmb = await getEmbedding(req)
 
     if (!reqEmb || !resumeEmbeddings.length) {
-      satisfied.push(false)
-      reasons.push("Embedding failure")
+      // fallback immediately
+      const check = await callClaude(
+        "Answer ONLY true or false: does resume satisfy requirement?",
+        `Requirement: ${req}\nResume:\n${resume}`
+      )
+
+      const isMatch = check.toLowerCase().includes("true")
+
+      satisfied.push(isMatch)
+      reasons.push("LLM (no embeddings)")
       continue
     }
 
     let bestScore = 0
 
     for (const emb of resumeEmbeddings) {
-      const score = cosineSimilarity(emb, reqEmb)
-      if (score > bestScore) bestScore = score
+      const s = cosineSimilarity(emb, reqEmb)
+      if (s > bestScore) bestScore = s
     }
 
-    if (bestScore > 0.82) {
+    // 🔥 LOWER thresholds
+    if (bestScore > 0.75) {
       satisfied.push(true)
       reasons.push("Strong semantic match")
-    } else if (bestScore < 0.65) {
-      satisfied.push(false)
-      reasons.push("Low similarity")
-    } else {
+    } else if (bestScore < 0.55) {
+      // fallback instead of hard fail
       const check = await callClaude(
         "Answer ONLY true or false: does resume satisfy requirement?",
         `Requirement: ${req}\nResume:\n${resume}`
@@ -105,20 +110,30 @@ async function validateHybrid(resume, jdStruct, callClaude) {
 
       satisfied.push(isMatch)
       reasons.push("LLM fallback")
+    } else {
+      // borderline → LLM decides
+      const check = await callClaude(
+        "Answer ONLY true or false: does resume satisfy requirement?",
+        `Requirement: ${req}\nResume:\n${resume}`
+      )
+
+      const isMatch = check.toLowerCase().includes("true")
+
+      satisfied.push(isMatch)
+      reasons.push("LLM decision")
     }
   }
 
   return { satisfied, reasons }
 }
 
-// --- GENERATION WITH FEEDBACK LOOP ---
+// --- GENERATION LOOP ---
 export async function generateResume(base, jd, stories, jdStruct, callClaude) {
   let best = ""
   let bestScore = 0
   let bestExplain = { coverage: 0, semanticReasons: [] }
 
   for (let i = 0; i < 3; i++) {
-    // 🔥 Identify missing requirements from previous attempt
     let missing = []
 
     if (i > 0 && bestExplain?.semanticReasons?.length) {
@@ -140,10 +155,10 @@ ${base}
 Job Description:
 ${jd}
 
-Missing requirements to include:
+Missing requirements:
 ${missing.join("\n")}
 
-Improve alignment specifically for these requirements.`
+Improve alignment specifically for these.`
     )
 
     const semantic = await validateHybrid(res, jdStruct, callClaude)
@@ -153,9 +168,10 @@ Improve alignment specifically for these requirements.`
     const total = satisfiedArray.length || 1
 
     const coverage = satisfiedCount / total
+
+    // 🔥 smoother scoring
     const score = Math.round(coverage * 10)
 
-    // Track best attempt
     if (score > bestScore) {
       best = res
       bestScore = score
@@ -165,8 +181,8 @@ Improve alignment specifically for these requirements.`
       }
     }
 
-    // ✅ Early exit if strong
-    if (score >= 6 && coverage >= 0.6) {
+    // 🔥 LOWER PASS BAR
+    if (score >= 5 && coverage >= 0.5) {
       return {
         best: res,
         bestScore: score,
@@ -181,13 +197,12 @@ Improve alignment specifically for these requirements.`
     }
   }
 
-  // ❌ Final fallback
   return {
     best,
     bestScore,
     keywords: jdStruct?.must_have || [],
     jdStruct,
     explain: bestExplain,
-    reject: bestScore < 5
+    reject: bestScore < 4
   }
 }

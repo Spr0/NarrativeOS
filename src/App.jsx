@@ -827,6 +827,11 @@ async function buildFinalResumeText(baseResume, strategy, jd) {
     PROMPTS.resumeRender(),
     `Base Resume:\n${stripPreIntelRoles(baseResume)}\n\nApproved Strategy:\n${JSON.stringify(strategy, null, 2)}\n\nJob Description:\n${jd}`,
     2700
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. SHARED STYLES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const S = {

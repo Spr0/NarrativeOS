@@ -8,18 +8,28 @@ export default function App() {
 
   const handleGenerate = async () => {
     setLoading(true);
+    setResult(null);
 
-    const response = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        resume: JSON.parse(resumeInput),
-        requirements: jdInput.split("\n")
-      })
-    });
+    try {
+      const response = await fetch("/.netlify/functions/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          resume: resumeInput, // ✅ RAW TEXT
+          requirements: jdInput.split("\n").filter(Boolean)
+        })
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    setResult(data);
+      if (data.error) {
+        alert(data.error);
+      } else {
+        setResult(data);
+      }
+    } catch (err) {
+      alert("Something went wrong");
+    }
+
     setLoading(false);
   };
 
@@ -27,15 +37,15 @@ export default function App() {
     <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>NarrativeOS</h1>
 
-      <h3>Resume JSON</h3>
+      <h3>Paste Resume</h3>
       <textarea
-        rows={10}
+        rows={12}
         style={{ width: "100%" }}
         value={resumeInput}
         onChange={(e) => setResumeInput(e.target.value)}
       />
 
-      <h3>Job Description (1 requirement per line)</h3>
+      <h3>Job Requirements (one per line)</h3>
       <textarea
         rows={6}
         style={{ width: "100%" }}
@@ -61,7 +71,7 @@ export default function App() {
 
           <h3>Experience</h3>
           {result.roles.map((role, i) => (
-            <div key={i} style={{ marginBottom: 20 }}>
+            <div key={i}>
               <strong>
                 {role.title} — {role.company}
               </strong>

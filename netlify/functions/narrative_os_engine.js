@@ -9,18 +9,35 @@ function clean(text = "") {
 }
 
 // ==============================
-// REQUIREMENTS
+// REQUIREMENTS WITH AND/OR LOGIC
 // ==============================
 
 function extractRequirements(text = "") {
-  return text
+  const lines = text
     .split("\n")
     .map(r => clean(r))
     .filter(r =>
       r.length > 30 &&
       !/responsibilities$/i.test(r)
-    )
-    .slice(0, 12);
+    );
+
+  return lines.slice(0, 15).map(line => {
+    const lower = line.toLowerCase();
+
+    let type = "STANDARD";
+
+    if (lower.includes(" and ")) type = "REQUIRED";
+    if (lower.includes(" or ")) type = "OPTIONAL";
+
+    return {
+      text: line,
+      type,
+      weight:
+        type === "REQUIRED" ? 1.2 :
+        type === "OPTIONAL" ? 0.7 :
+        1.0
+    };
+  });
 }
 
 // ==============================
@@ -49,42 +66,17 @@ function extractBullets(text = "") {
 }
 
 // ==============================
-// GENERIC PENALTY
-// ==============================
-
-function genericPenalty(text = "") {
-  const t = text.toLowerCase();
-
-  let penalty = 0;
-
-  if (t.includes("responsible for")) penalty += 0.15;
-  if (t.includes("led")) penalty += 0.05;
-  if (t.includes("managed")) penalty += 0.05;
-
-  if (
-    t.includes("program") &&
-    t.includes("delivery") &&
-    !t.match(/\d/)
-  ) {
-    penalty += 0.2; // generic leadership fluff
-  }
-
-  return penalty;
-}
-
-// ==============================
-// SCORING (FIXED DISTRIBUTION)
+// SCORING
 // ==============================
 
 function scoreBullet(req, bullet) {
   const r = req.toLowerCase();
   const b = bullet.toLowerCase();
 
-  let score = 0;
+  let score = 0.25;
 
   let signalCount = 0;
 
-  // capability signals (lower weights)
   if (b.includes("program")) {
     score += 0.15;
     signalCount++;
@@ -105,21 +97,15 @@ function scoreBullet(req, bullet) {
     signalCount++;
   }
 
-  // keyword overlap (reduced)
-  const words = r.split(/\W+/).filter(w => w.length > 6);
+  const words = r.split(/\W+/).filter(w => w.length > 5);
   const matches = words.filter(w => b.includes(w)).length;
 
-  score += Math.min(matches * 0.05, 0.2);
+  score += Math.min(matches * 0.06, 0.25);
 
-  // require multiple signals for high score
-  if (signalCount >= 3) {
-    score += 0.15;
+  if (signalCount >= 2) {
+    score += 0.1;
   }
 
-  // penalty
-  score -= genericPenalty(b);
-
-  // clamp
   return Math.max(0, Math.min(score, 1));
 }
 
@@ -137,7 +123,9 @@ export async function runNarrativeOS({
 
     const results = [];
 
-    for (const req of requirements) {
+    for (const reqObj of requirements) {
+      const { text: req, weight, type } = reqObj;
+
       const ranked = safeArray(bullets).map((b, i) => ({
         bulletId: i,
         text: b,
@@ -148,6 +136,8 @@ export async function runNarrativeOS({
 
       results.push({
         requirement: req,
+        type,
+        weight,
         capability: "GENERAL",
         rankedBullets: ranked.slice(0, 5),
         recommendation: ranked[0] || null,
@@ -155,35 +145,35 @@ export async function runNarrativeOS({
     }
 
     // ==============================
-    // REALISTIC SCORING
+    // WEIGHTED SCORING (NEW)
     // ==============================
 
-    const strong = results.filter(
-      r => r?.rankedBullets?.[0]?.score >= 0.75
-    ).length;
+    let totalWeight = 0;
+    let earnedWeight = 0;
 
-    const medium = results.filter(
-      r => {
-        const s = r?.rankedBullets?.[0]?.score || 0;
-        return s >= 0.55 && s < 0.75;
+    for (const r of results) {
+      const bestScore = r?.rankedBullets?.[0]?.score || 0;
+
+      totalWeight += r.weight;
+
+      if (bestScore >= 0.7) {
+        earnedWeight += r.weight;
+      } else if (bestScore >= 0.5) {
+        earnedWeight += r.weight * 0.6;
       }
-    ).length;
+    }
 
-    const total = results.length || 1;
-
-    const weighted =
-      (strong * 1.0 + medium * 0.5) / total;
-
-    const compressed = Math.pow(weighted, 1.2);
+    const coverage =
+      totalWeight > 0 ? earnedWeight / totalWeight : 0;
 
     const finalScore = Math.min(
       10,
-      Math.round(compressed * 10)
+      Math.round(Math.pow(coverage, 1.1) * 10)
     );
 
     return {
       score: finalScore,
-      coverage: weighted,
+      coverage,
       requirements: safeArray(results),
     };
 

@@ -27,13 +27,18 @@ async function generateNarrativeOSResume({
 }
 
 /**
- * 🧱 CLEAN PARSER
+ * 🧱 SAFE PARSER (deterministic > smart)
  */
 function parseResume(text) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const lines = text
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const header = lines[0] || "Candidate";
 
   return {
-    header: lines[0] || "Candidate",
+    header,
     summary: extractSummary(lines),
     skills: extractSkills(lines),
     roles: extractRoles(lines),
@@ -42,63 +47,68 @@ function parseResume(text) {
 }
 
 /**
- * 🔹 SUMMARY (first paragraph only)
+ * 🔹 SUMMARY = first long paragraph
  */
 function extractSummary(lines) {
   return lines.find(l => l.length > 80) || "";
 }
 
 /**
- * 🔹 SKILLS (short lines only)
+ * 🔹 SKILLS = short clean lines only
  */
 function extractSkills(lines) {
   return lines
     .filter(l =>
       l.length < 60 &&
       !l.includes("@") &&
-      !l.includes("|")
+      !l.includes("|") &&
+      !l.match(/\d{4}/)
     )
     .slice(0, 8);
 }
 
 /**
- * 🔹 ROLES (strict filtering)
+ * 🔹 ROLES (STRICT + SAFE)
  */
 function extractRoles(lines) {
   const roles = [];
-  let current = null;
+
+  let currentRole = null;
 
   for (let line of lines) {
-    const isHeader =
-      line.includes("|") ||
+    // 👉 ROLE HEADERS (must look like a job)
+    const isRoleHeader =
       line.includes("—") ||
-      line.match(/\d{4}/);
+      (line.includes("|") && line.match(/\d{4}/));
 
-    if (isHeader) {
-      if (current) roles.push(current);
+    if (isRoleHeader) {
+      if (currentRole) roles.push(currentRole);
 
-      current = {
+      currentRole = {
         title: line,
         bullets: []
       };
       continue;
     }
 
-    // 🔥 BULLET FILTER
+    // 👉 BULLETS (strict filter)
     if (
-      current &&
+      currentRole &&
+      line.length > 40 &&
       line.length < 180 &&
       !line.includes("@") &&
       !line.toLowerCase().includes("summary") &&
       !line.toLowerCase().includes("competencies") &&
-      current.bullets.length < 4
+      !line.toLowerCase().includes("skills") &&
+      currentRole.bullets.length < 4
     ) {
-      current.bullets.push(line);
+      currentRole.bullets.push(line);
     }
   }
 
-  if (current) roles.push(current);
+  if (currentRole) roles.push(currentRole);
 
+  // 👉 HARD GUARANTEE
   return roles.slice(0, 3);
 }
 
@@ -121,7 +131,7 @@ function extractEducation(lines) {
 }
 
 /**
- * 🧠 MATCHING (unchanged logic, now with clean bullets)
+ * 🧠 MATCHING (simple + reliable)
  */
 function analyzeRequirementsWithTrace(resume, requirements = []) {
   const partial = [];
@@ -139,28 +149,26 @@ function analyzeRequirementsWithTrace(resume, requirements = []) {
 
   for (let req of requirements) {
     const r = normalizeText(req);
-    const reqWords = r.split(" ").filter(w => w.length > 4);
+    const words = r.split(" ").filter(w => w.length > 4);
 
     const scored = allBullets.map(b => {
       let score = 0;
 
-      for (let word of reqWords) {
-        if (b.norm.includes(word)) score += 2;
+      for (let w of words) {
+        if (b.norm.includes(w)) score += 2;
       }
 
-      if (r.includes("governance") && b.norm.includes("governance")) score += 3;
-      if (r.includes("executive") && b.norm.includes("executive")) score += 2;
-
-      if (score < 2) score = 0;
+      if (b.norm.includes("program")) score += 1;
+      if (b.norm.includes("governance")) score += 2;
 
       return { ...b, score };
     });
 
     const best = scored
       .sort((a, b) => b.score - a.score)
-      .filter(s => s.score > 0);
+      .filter(s => s.score > 1);
 
-    if (best.length > 0) {
+    if (best.length) {
       partial.push(req);
 
       trace.push({
@@ -168,6 +176,7 @@ function analyzeRequirementsWithTrace(resume, requirements = []) {
         status: "partial",
         evidence: best.slice(0, 2)
       });
+
     } else {
       missing.push(req);
 
@@ -192,6 +201,9 @@ function analyzeRequirementsWithTrace(resume, requirements = []) {
   };
 }
 
+/**
+ * ✅ EXPORT (CRITICAL)
+ */
 module.exports = {
   generateNarrativeOSResume
 };

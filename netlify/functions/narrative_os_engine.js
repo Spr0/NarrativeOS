@@ -15,16 +15,21 @@ async function generateNarrativeOSResume({
 
   const roles = enforceRoles(parsed.roles);
 
+  const skills = cleanSkills(parsed.skills);
+
   const cleanedRequirements = cleanRequirements(jobRequirements);
 
-  const analysis = analyzeRequirements(parsed, cleanedRequirements);
+  const analysis = analyzeRequirements(
+    { ...parsed, skills, roles },
+    cleanedRequirements
+  );
 
-  const summary = buildSummary(parsed);
+  const summary = buildSummary({ roles, skills });
 
   return {
     header: parsed.header,
     summary,
-    skills: parsed.skills,
+    skills,
     roles,
     education: parsed.education,
     analysis
@@ -32,7 +37,7 @@ async function generateNarrativeOSResume({
 }
 
 /**
- * 🔥 HYBRID PARSER (LLM + FALLBACK)
+ * PARSER (same stable hybrid)
  */
 async function parseResume(rawText) {
   let parsed;
@@ -66,91 +71,45 @@ ${rawText}
     parsed = {};
   }
 
-  // 🔥 FALLBACKS (CRITICAL)
   return {
-    header: parsed.header || extractHeader(rawText),
-    skills: parsed.skills?.length ? parsed.skills : extractSkills(rawText),
-    roles: parsed.roles?.length ? parsed.roles : extractRoles(rawText),
-    education: parsed.education?.length ? parsed.education : extractEducation(rawText)
+    header: parsed.header || rawText.split("\n")[0],
+    skills: parsed.skills || [],
+    roles: parsed.roles || [],
+    education: parsed.education || []
   };
 }
 
 /**
- * 🔥 FALLBACK: HEADER
+ * 🔥 CLEAN SKILLS
  */
-function extractHeader(text) {
-  return text.split("\n")[0];
+function cleanSkills(skills = []) {
+  const flat = skills
+    .join(" | ")
+    .split("|")
+    .map(s => s.trim())
+    .filter(s => s.length > 2 && s.length < 40);
+
+  return [...new Set(flat)].slice(0, 10);
 }
 
 /**
- * 🔥 FALLBACK: SKILLS
- */
-function extractSkills(text) {
-  const lines = text.split("\n");
-  const skillLines = lines.filter(l =>
-    l.toLowerCase().includes("sap") ||
-    l.toLowerCase().includes("netSuite") ||
-    l.toLowerCase().includes("salesforce") ||
-    l.toLowerCase().includes("agile") ||
-    l.toLowerCase().includes("risk")
-  );
-
-  return skillLines.slice(0, 8);
-}
-
-/**
- * 🔥 FALLBACK: ROLES
- */
-function extractRoles(text) {
-  const sections = text.split("\n");
-
-  const roles = [];
-  let currentRole = null;
-
-  for (let line of sections) {
-    if (line.match(/—/)) {
-      if (currentRole) roles.push(currentRole);
-
-      const [title, company] = line.split("—");
-
-      currentRole = {
-        title: title.trim(),
-        company: company?.trim() || "",
-        bullets: []
-      };
-    } else if (currentRole && line.length > 30) {
-      currentRole.bullets.push(line.trim());
-    }
-  }
-
-  if (currentRole) roles.push(currentRole);
-
-  return roles.slice(0, 3);
-}
-
-/**
- * 🔥 FALLBACK: EDUCATION
- */
-function extractEducation(text) {
-  return text
-    .split("\n")
-    .filter(l => l.toLowerCase().includes("university"))
-    .slice(0, 2)
-    .map(e => ({ degree: e }));
-}
-
-/**
- * CLEAN JD
+ * 🔥 CLEAN JD (critical)
  */
 function cleanRequirements(reqs = []) {
   return reqs
     .map(r => r.trim())
-    .filter(r => r.length > 20)
+    .filter(r =>
+      r.length > 25 &&
+      !r.toLowerCase().includes("apply") &&
+      !r.toLowerCase().includes("linkedin") &&
+      !r.toLowerCase().includes("people") &&
+      !r.toLowerCase().includes("click")
+    )
     .slice(0, 8);
 }
 
 /**
- * SCORING
+ * SCORING (unchanged)
  */
 function analyzeRequirements(resume, requirements = []) {
   const text = normalizeText([
@@ -182,13 +141,13 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * SUMMARY
+ * 🔥 CLEAN SUMMARY (deterministic)
  */
-function buildSummary(resume) {
-  const roles = resume.roles?.map(r => r.title).join(", ");
-  const skills = resume.skills?.slice(0, 4).join(", ");
+function buildSummary({ roles, skills }) {
+  const roleTitles = roles?.map(r => r.title).slice(0, 2).join(", ");
+  const skillList = skills?.slice(0, 4).join(", ");
 
-  return `${roles} professional with experience in ${skills}.`;
+  return `${roleTitles} professional with expertise in ${skillList}.`;
 }
 
 /**

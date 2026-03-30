@@ -1,24 +1,127 @@
 import { useState } from "react";
 import * as Engine from "./narrative_os_engine.js";
 
+// ─────────────────────────────────────────
+// SAFE HELPERS
+// ─────────────────────────────────────────
+
 function safeArray(arr) {
   return Array.isArray(arr) ? arr : [];
 }
 
-export default function App() {
-  const [jd, setJd] = useState("");
-  const [resume, setResume] = useState("");
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
 
-  const analyze = async () => {
+// ─────────────────────────────────────────
+// REQUIREMENT CARD
+// ─────────────────────────────────────────
+
+function RequirementCard({ item }) {
+  const [open, setOpen] = useState(false);
+
+  const score = clamp(item.score || 0, 0, 100);
+
+  const color =
+    score >= 85 ? "#22c55e" :
+    score >= 70 ? "#84cc16" :
+    score >= 55 ? "#f59e0b" :
+    score >= 40 ? "#f97316" : "#ef4444";
+
+  return (
+    <div style={{
+      border: "1px solid #ddd",
+      borderRadius: 10,
+      padding: 16,
+      marginBottom: 12,
+      background: "#fff"
+    }}>
+      {/* HEADER */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            {item.requirement}
+          </div>
+
+          <div style={{ fontSize: 13, color: "#555" }}>
+            {item.summary || "No strong evidence found"}
+          </div>
+        </div>
+
+        <div style={{
+          minWidth: 60,
+          textAlign: "center",
+          fontWeight: 700,
+          color,
+          fontSize: 18
+        }}>
+          {score}
+          <div style={{ fontSize: 11, fontWeight: 400 }}>Strength</div>
+        </div>
+      </div>
+
+      {/* TOGGLE */}
+      <div style={{ marginTop: 10 }}>
+        <button
+          onClick={() => setOpen(!open)}
+          style={{
+            fontSize: 12,
+            background: "none",
+            border: "none",
+            color: "#2563eb",
+            cursor: "pointer"
+          }}
+        >
+          {open ? "Hide details" : "Show details"}
+        </button>
+      </div>
+
+      {/* DETAILS */}
+      {open && (
+        <div style={{ marginTop: 12, fontSize: 14 }}>
+          {item.gap && (
+            <div style={{ marginBottom: 10 }}>
+              <strong style={{ color: "#dc2626" }}>Gap:</strong>
+              <div>{item.gap}</div>
+            </div>
+          )}
+
+          {item.fix && (
+            <div>
+              <strong style={{ color: "#16a34a" }}>How to Improve:</strong>
+              <div>{item.fix}</div>
+            </div>
+          )}
+
+          {!item.gap && (
+            <div style={{ color: "#16a34a" }}>
+              Strong match — no critical gaps detected
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// MAIN APP
+// ─────────────────────────────────────────
+
+export default function App() {
+  const [jobText, setJobText] = useState("");
+  const [resumeText, setResumeText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function handleAnalyze() {
     setLoading(true);
     setResult(null);
 
     try {
       console.log("Running analysis...");
 
-      const data = await Engine.analyzeJob(jd, resume);
+      const data = await Engine.analyzeJob(jobText, resumeText);
 
       console.log("RESULT:", data);
 
@@ -34,53 +137,63 @@ export default function App() {
     }
 
     setLoading(false);
-  };
+  }
+
+  const requirements = safeArray(result?.requirements);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>NarrativeOS</h1>
+    <div style={{ maxWidth: 900, margin: "40px auto", padding: 20 }}>
+      <h1 style={{ marginBottom: 20 }}>Resume Match Analyzer</h1>
 
-      <textarea
-        placeholder="Job Description"
-        value={jd}
-        onChange={(e) => setJd(e.target.value)}
-        style={{ width: "100%", height: 120 }}
-      />
+      {/* INPUTS */}
+      <div style={{ marginBottom: 20 }}>
+        <textarea
+          placeholder="Paste job description..."
+          value={jobText}
+          onChange={(e) => setJobText(e.target.value)}
+          style={{ width: "100%", height: 120, marginBottom: 10 }}
+        />
 
-      <textarea
-        placeholder="Resume"
-        value={resume}
-        onChange={(e) => setResume(e.target.value)}
-        style={{ width: "100%", height: 120, marginTop: 10 }}
-      />
+        <textarea
+          placeholder="Paste resume..."
+          value={resumeText}
+          onChange={(e) => setResumeText(e.target.value)}
+          style={{ width: "100%", height: 120 }}
+        />
+      </div>
 
-      <button onClick={analyze} disabled={loading}>
+      {/* BUTTON */}
+      <button
+        onClick={handleAnalyze}
+        disabled={loading || !jobText || !resumeText}
+        style={{
+          padding: "10px 20px",
+          fontSize: 16,
+          cursor: "pointer"
+        }}
+      >
         {loading ? "Analyzing..." : "Analyze"}
       </button>
 
       {/* ERROR */}
       {result?.error && (
-        <div style={{ color: "red", marginTop: 10 }}>
+        <div style={{ color: "red", marginTop: 20 }}>
           Error: {result.message || "Something went wrong"}
         </div>
       )}
 
-      {/* SCORE */}
-      {result?.score !== undefined && (
-        <h2>Score: {result.score}/10</h2>
-      )}
-
       {/* RESULTS */}
-      {safeArray(result?.requirements).map((r, i) => (
-        <div key={i} style={{ border: "1px solid #ccc", marginTop: 10, padding: 10 }}>
-          <strong>{r.requirement}</strong>
-          <div>Strength: {r.score}</div>
-          <div>{r.summary}</div>
+      {result && !result.error && (
+        <div style={{ marginTop: 30 }}>
+          <h2>Score: {result.score}/10</h2>
 
-          {r.gap && <div style={{ color: "red" }}>Gap: {r.gap}</div>}
-          {r.fix && <div style={{ color: "green" }}>Fix: {r.fix}</div>}
+          <div style={{ marginTop: 20 }}>
+            {requirements.map((r, i) => (
+              <RequirementCard key={i} item={r} />
+            ))}
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }

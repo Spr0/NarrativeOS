@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { analyzeJob } from "./narrative_os_engine.js"; // ✅ FIXED IMPORT
 
 // ─────────────────────────────────────────
 // SAFE HELPERS
@@ -35,7 +36,6 @@ function RequirementCard({ item }) {
       marginBottom: 12,
       background: "#fff"
     }}>
-      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>
@@ -59,7 +59,6 @@ function RequirementCard({ item }) {
         </div>
       </div>
 
-      {/* EXPAND BUTTON */}
       <div style={{ marginTop: 10 }}>
         <button
           onClick={() => setOpen(!open)}
@@ -75,7 +74,6 @@ function RequirementCard({ item }) {
         </button>
       </div>
 
-      {/* DETAILS */}
       {open && (
         <div style={{ marginTop: 12, fontSize: 14 }}>
           {item.gap && (
@@ -118,9 +116,7 @@ export default function App() {
     setResult(null);
 
     try {
-      const { analyzeJob } = await import("../narrative_os_engine.js");
-
-      const data = await analyzeJob(jobText, resumeText);
+      const data = await analyzeJob(jobText, resumeText); // ✅ no dynamic import
 
       setResult(data);
     } catch (e) {
@@ -137,7 +133,6 @@ export default function App() {
     <div style={{ maxWidth: 900, margin: "40px auto", padding: 20 }}>
       <h1 style={{ marginBottom: 20 }}>Resume Match Analyzer</h1>
 
-      {/* INPUTS */}
       <div style={{ marginBottom: 20 }}>
         <textarea
           placeholder="Paste job description..."
@@ -154,7 +149,6 @@ export default function App() {
         />
       </div>
 
-      {/* BUTTON */}
       <button
         onClick={handleAnalyze}
         disabled={loading || !jobText || !resumeText}
@@ -167,7 +161,6 @@ export default function App() {
         {loading ? "Analyzing..." : "Analyze"}
       </button>
 
-      {/* RESULTS */}
       {result && !result.error && (
         <div style={{ marginTop: 30 }}>
           <h2>Score: {result.score}/10</h2>
@@ -180,7 +173,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ERROR */}
       {result?.error && (
         <div style={{ color: "red", marginTop: 20 }}>
           {result.error}

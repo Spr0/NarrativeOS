@@ -17,6 +17,8 @@ async function generateNarrativeOSResume({
 
   const roles = enforceRoles(normalized.roles);
 
+  const analysis = analyzeRequirements(normalized, jobRequirements);
+
   const summary = await generateSummary(normalized, jobRequirements);
 
   return {
@@ -24,12 +26,13 @@ async function generateNarrativeOSResume({
     summary,
     skills: normalized.skills || [],
     roles,
-    education: normalized.education || ""
+    education: normalized.education || [],
+    analysis
   };
 }
 
 /**
- * 🔥 STRONG PARSER
+ * PARSER (same working version)
  */
 async function parseResume(rawText) {
   try {
@@ -37,30 +40,23 @@ async function parseResume(rawText) {
 You are a resume parser.
 
 STRICT RULES:
-- Extract REAL content only (no placeholders)
-- DO NOT write generic summaries
+- Extract REAL content only
 - DO NOT invent experience
-- ALWAYS extract at least 1 role if any experience exists
+- ALWAYS extract roles if present
 
 FORMAT (VALID JSON ONLY):
 {
-  "header": "name",
-  "skills": ["skill1", "skill2"],
+  "header": "",
+  "skills": [],
   "roles": [
     {
       "title": "",
       "company": "",
       "dates": "",
-      "bullets": ["", "", ""]
+      "bullets": []
     }
   ],
-  "education": [
-    {
-      "degree": "",
-      "field": "",
-      "institution": ""
-    }
-  ]
+  "education": []
 }
 
 RESUME:
@@ -90,7 +86,7 @@ ${rawText}
 }
 
 /**
- * ENSURE ROLES EXIST
+ * ENSURE ROLES
  */
 function enforceRoles(roles = []) {
   if (!roles.length) {
@@ -111,26 +107,63 @@ function enforceRoles(roles = []) {
 }
 
 /**
- * CLEAN JSON
+ * 🔥 REQUIREMENT ANALYSIS (NEW CORE)
  */
-function extractJSON(text) {
-  const match = text.match(/\{[\s\S]*\}/);
-  return match ? match[0] : "{}";
+function analyzeRequirements(resume, requirements = []) {
+  const resumeText = [
+    ...(resume.skills || []),
+    ...(resume.roles || []).flatMap(r => r.bullets || [])
+  ].join(" ").toLowerCase();
+
+  const matched = [];
+  const partial = [];
+  const missing = [];
+
+  for (let req of requirements) {
+    const r = req.toLowerCase();
+
+    if (resumeText.includes(r)) {
+      matched.push(req);
+    } else if (hasPartialMatch(r, resumeText)) {
+      partial.push(req);
+    } else {
+      missing.push(req);
+    }
+  }
+
+  const total = requirements.length || 1;
+  const coverage = Math.round(((matched.length + partial.length * 0.5) / total) * 100);
+
+  const score = Math.round((coverage / 10) * 10) / 10; // scale to 0–10
+
+  return {
+    score,
+    coverage,
+    matched,
+    partial,
+    missing
+  };
 }
 
 /**
- * REAL SUMMARY (NO GENERIC FILLER)
+ * SIMPLE PARTIAL MATCH
+ */
+function hasPartialMatch(req, text) {
+  const words = req.split(" ").filter(w => w.length > 4);
+  return words.some(w => text.includes(w));
+}
+
+/**
+ * SUMMARY
  */
 async function generateSummary(resume, jobRequirements) {
   try {
     const prompt = `
-Write a concise professional summary using ONLY real experience.
+Write a concise summary (max 60 words).
 
-RULES:
-- Max 60 words
-- No placeholders like [your industry]
-- No generic fluff
-- Use actual roles and skills
+- Use real experience only
+- No placeholders
+- Align with job requirements
 
 ROLES:
 ${resume.roles?.map(r => r.title).join(", ")}
@@ -138,7 +171,7 @@ ${resume.roles?.map(r => r.title).join(", ")}
 SKILLS:
 ${resume.skills?.join(", ")}
 
-TARGET JOB:
+JOB:
 ${jobRequirements?.slice(0, 5).join(", ")}
 `;
 
@@ -152,6 +185,14 @@ ${jobRequirements?.slice(0, 5).join(", ")}
   } catch {
     return "";
   }
+}
+
+/**
+ * CLEAN JSON
+ */
+function extractJSON(text) {
+  const match = text.match(/\{[\s\S]*\}/);
+  return match ? match[0] : "{}";
 }
 
 module.exports = {

@@ -1,18 +1,12 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 function App() {
   const [resumeInput, setResumeInput] = useState("");
   const [jdInput, setJdInput] = useState("");
   const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
 
   const [selectedTrace, setSelectedTrace] = useState(null);
   const [selectedBullet, setSelectedBullet] = useState(null);
-
-  const [changedBullet, setChangedBullet] = useState(null);
-  const [changeInfo, setChangeInfo] = useState(null);
-
-  const bulletRefs = useRef({});
 
   function extractRequirements(text) {
     return text
@@ -22,57 +16,34 @@ function App() {
       .slice(0, 8);
   }
 
-  async function safeFetch(body) {
-    try {
-      const res = await fetch("/.netlify/functions/generate", {
-        method: "POST",
-        body: JSON.stringify(body)
-      });
-
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.message || "Server error");
-      }
-
-      return data;
-    } catch (err) {
-      console.error(err);
-      setError(err.message);
-      return null;
-    }
-  }
-
   const handleGenerate = async () => {
-    setError(null);
-
-    const data = await safeFetch({
-      resume: resumeInput,
-      requirements: extractRequirements(jdInput)
+    const res = await fetch("/.netlify/functions/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        resume: resumeInput,
+        requirements: extractRequirements(jdInput)
+      })
     });
 
-    if (!data) return;
-
+    const data = await res.json();
     setResult(data);
     setSelectedTrace(null);
     setSelectedBullet(null);
-    setChangeInfo(null);
   };
 
   const handleFix = async () => {
     if (!selectedBullet || !selectedTrace) return;
 
-    setError(null);
-
-    const oldScore = result?.analysis?.score || 0;
-
-    const fixData = await safeFetch({
-      mode: "fix",
-      bullet: selectedBullet.text,
-      requirement: selectedTrace.requirement
+    const res = await fetch("/.netlify/functions/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "fix",
+        bullet: selectedBullet.text,
+        requirement: selectedTrace.requirement
+      })
     });
 
-    if (!fixData) return;
+    const data = await res.json();
 
     const updatedRoles = result.roles.map((r, ri) => ({
       ...r,
@@ -81,53 +52,23 @@ function App() {
           ri === selectedBullet.roleIndex &&
           bi === selectedBullet.bulletIndex
         ) {
-          return fixData.rewritten;
+          return data.rewritten;
         }
         return b;
       })
     }));
 
-    const rescored = await safeFetch({
-      resume: resumeInput,
-      requirements: extractRequirements(jdInput)
-    });
-
-    if (!rescored) return;
-
-    const newScore = rescored?.analysis?.score || oldScore;
-
     setResult({
-      ...rescored,
+      ...result,
       roles: updatedRoles
     });
 
-    const key = `${selectedBullet.roleIndex}-${selectedBullet.bulletIndex}`;
-
-    setChangedBullet(key);
-
-    setChangeInfo({
-      before: selectedBullet.text,
-      after: fixData.rewritten,
-      delta: (newScore - oldScore).toFixed(1)
-    });
-
-    setTimeout(() => {
-      bulletRefs.current[key]?.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-    }, 100);
+    setSelectedBullet(null);
   };
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
       <h1>NarrativeOS</h1>
-
-      {error && (
-        <div style={{ color: "red", marginBottom: 10 }}>
-          ⚠️ {error}
-        </div>
-      )}
 
       <label><strong>Paste Resume</strong></label>
       <textarea
@@ -154,12 +95,16 @@ function App() {
 
           <h3>Score: {result.analysis.score} / 10</h3>
 
-          <h4>⚠️ Partial</h4>
-          <ul>
+          {/* STEP 1 */}
+          <h3 style={{ marginTop: 20 }}>Step 1: Select a requirement</h3>
+          <ul style={{ listStyle: "none", padding: 0 }}>
             {result.analysis.partial.map((req) => {
               const traceItem = result.analysis.trace.find(
                 t => t.requirement === req
               );
+
+              const isSelected =
+                selectedTrace?.requirement === req;
 
               return (
                 <li
@@ -168,41 +113,90 @@ function App() {
                     setSelectedTrace(traceItem);
                     setSelectedBullet(null);
                   }}
-                  style={{ cursor: "pointer" }}
+                  style={{
+                    cursor: "pointer",
+                    marginBottom: 8,
+                    padding: 10,
+                    border: isSelected
+                      ? "2px solid #0077ff"
+                      : "1px solid #ddd",
+                    borderRadius: 6,
+                    background: isSelected ? "#e3f2fd" : "white"
+                  }}
                 >
-                  {req}
+                  {isSelected ? "✔ " : "○ "} {req}
                 </li>
               );
             })}
           </ul>
 
+          {/* STEP 2 */}
           {selectedTrace && (
-            <div>
-              {selectedTrace.evidence.map((e, i) => (
-                <p key={i} onClick={() => setSelectedBullet(e)}>
-                  • {e.text}
-                </p>
-              ))}
+            <div style={{ marginTop: 20 }}>
+              <h3>Step 2: Choose a bullet to improve</h3>
 
-              <button onClick={handleFix}>
-                🔧 Fix selected bullet
-              </button>
+              {selectedTrace.evidence.map((e, i) => {
+                const isSelected = selectedBullet === e;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => setSelectedBullet(e)}
+                    style={{
+                      cursor: "pointer",
+                      padding: 10,
+                      marginBottom: 8,
+                      border: isSelected
+                        ? "2px solid #0077ff"
+                        : "1px solid #ddd",
+                      borderRadius: 6,
+                      background: isSelected ? "#e8f5e9" : "#fafafa"
+                    }}
+                  >
+                    {isSelected ? "✔ " : "○ "} {e.text}
+                  </div>
+                );
+              })}
             </div>
           )}
 
-          <h3>Experience</h3>
-          {result.roles.map((r, ri) => (
-            <div key={ri}>
+          {/* STEP 3 */}
+          {selectedTrace && (
+            <div style={{ marginTop: 20 }}>
+              <h3>Step 3: Improve bullet</h3>
+
+              <button
+                onClick={handleFix}
+                disabled={!selectedBullet}
+                style={{
+                  background: selectedBullet ? "#0077ff" : "#ccc",
+                  color: "white",
+                  padding: "10px 14px",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: selectedBullet ? "pointer" : "not-allowed"
+                }}
+              >
+                🔧 Improve selected bullet
+              </button>
+
+              {!selectedBullet && (
+                <p style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+                  Select a bullet above to enable improvement
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* EXPERIENCE */}
+          <h3 style={{ marginTop: 30 }}>Experience</h3>
+          {result.roles.map((r, i) => (
+            <div key={i}>
               <strong>{r.title}</strong>
               <ul>
-                {r.bullets.map((b, bi) => {
-                  const key = `${ri}-${bi}`;
-                  return (
-                    <li key={bi} ref={el => (bulletRefs.current[key] = el)}>
-                      {b}
-                    </li>
-                  );
-                })}
+                {r.bullets.map((b, j) => (
+                  <li key={j}>{b}</li>
+                ))}
               </ul>
             </div>
           ))}

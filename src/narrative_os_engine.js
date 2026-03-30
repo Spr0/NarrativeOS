@@ -1,4 +1,8 @@
-// narrative_os_engine.js
+// NarrativeOS Engine — Stable + Clean Matching (No LLM yet)
+
+// ─────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────
 
 function safeArray(arr) {
   return Array.isArray(arr) ? arr : [];
@@ -8,66 +12,110 @@ function clean(text = "") {
   return text.replace(/\s+/g, " ").trim();
 }
 
-// ==============================
+// ─────────────────────────────────────────
+// FILTER JUNK (CRITICAL FIX)
+// ─────────────────────────────────────────
+
+function isJunk(line = "") {
+  const l = line.toLowerCase();
+
+  return (
+    l.includes("@") ||
+    l.includes("linkedin") ||
+    l.includes("http") ||
+    l.includes("bellingham") ||
+    l.match(/\d{3}[-\s]?\d{3}/) || // phone
+    l.split("|").length > 3 ||     // contact line
+    l.length < 40
+  );
+}
+
+// ─────────────────────────────────────────
 // REQUIREMENTS
-// ==============================
+// ─────────────────────────────────────────
 
 function extractRequirements(text = "") {
   try {
     return text
-      .split("\n")
+      .split(/\n|\.|•|-/)
       .map(r => clean(r))
-      .filter(r => r.length > 30)
+      .filter(r => r.length > 40)
       .slice(0, 10);
   } catch {
     return [];
   }
 }
 
-// ==============================
-// BULLETS
-// ==============================
+// ─────────────────────────────────────────
+// RESUME BULLETS
+// ─────────────────────────────────────────
 
 function extractBullets(text = "") {
   try {
     return text
       .split("\n")
       .map(l => clean(l))
-      .filter(l => l.length > 30)
-      .slice(0, 20);
+      .filter(l => !isJunk(l)) // ✅ removes headers/contact
+      .slice(0, 25);
   } catch {
     return [];
   }
 }
 
-// ==============================
-// SIMPLE SCORING (SAFE)
-// ==============================
+// ─────────────────────────────────────────
+// BETTER SCORING (NON-DUMB)
+// ─────────────────────────────────────────
 
 function score(req, bullet) {
   try {
     const r = req.toLowerCase();
     const b = bullet.toLowerCase();
 
-    let s = 0;
+    let score = 0;
 
-    if (b.includes("program")) s += 0.2;
-    if (b.includes("delivery")) s += 0.2;
-    if (b.includes("stakeholder")) s += 0.2;
+    // Core signals
+    if (b.includes("erp")) score += 0.25;
+    if (b.includes("program")) score += 0.2;
+    if (b.includes("delivery")) score += 0.2;
+    if (b.includes("stakeholder")) score += 0.15;
+    if (b.includes("transformation")) score += 0.15;
 
-    if (r.split(" ").some(w => b.includes(w))) {
-      s += 0.3;
-    }
+    // Fuzzy overlap
+    const rWords = r.split(" ").filter(w => w.length > 4);
+    let overlap = 0;
 
-    return Math.min(1, s);
+    rWords.forEach(w => {
+      if (b.includes(w)) overlap++;
+    });
+
+    score += overlap * 0.05;
+
+    return Math.min(1, score);
+
   } catch {
     return 0;
   }
 }
 
-// ==============================
-// MAIN FUNCTION (NEVER FAILS)
-// ==============================
+// ─────────────────────────────────────────
+// SUMMARIZE EVIDENCE (UX FIX)
+// ─────────────────────────────────────────
+
+function summarizeBullet(bullet = "") {
+  if (!bullet) return "";
+
+  let summary = bullet.split(";")[0];
+
+  if (summary.length > 140) {
+    summary = summary.slice(0, 140) + "...";
+  }
+
+  return summary;
+}
+
+// ─────────────────────────────────────────
+// MAIN ENGINE
+// ─────────────────────────────────────────
 
 export async function analyzeJob(jobText = "", resumeText = "") {
   try {
@@ -82,19 +130,24 @@ export async function analyzeJob(jobText = "", resumeText = "") {
 
       for (const b of bullets) {
         const s = score(req, b);
+
         if (s > bestScore) {
           bestScore = s;
           bestBullet = b;
         }
       }
 
+      const strength = Math.round(bestScore * 100);
+
       results.push({
         requirement: req,
-        score: Math.round(bestScore * 100),
-        summary: bestBullet || "No strong evidence found",
-        gap: bestScore < 0.5 ? "Weak or unclear evidence" : null,
-        fix: bestScore < 0.5
-          ? "Add measurable outcomes, scope, or stakeholder impact"
+        score: strength,
+        summary: summarizeBullet(bestBullet),
+        gap: bestScore < 0.45
+          ? "Evidence not clearly demonstrated"
+          : null,
+        fix: bestScore < 0.45
+          ? "Make impact explicit (scale, stakeholders, measurable results)"
           : null
       });
     }

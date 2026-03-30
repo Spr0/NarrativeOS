@@ -1,27 +1,40 @@
 import { useState } from "react";
 
+function clean(text = "") {
+  return text.replace(/^com\s+/i, "").trim();
+}
+
+function percent(score) {
+  return Math.round((score || 0) * 100);
+}
+
 export default function App() {
   const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const [data, setData] = useState({
     score: 0,
     coverage: 0,
     requirements: [],
     error: false,
-    message: "",
   });
-  const [loading, setLoading] = useState(false);
 
-  // ==============================
-  // SAFE FETCH
-  // ==============================
+  const [expanded, setExpanded] = useState({});
 
-  const handleAnalyze = async () => {
+  const toggle = (i) => {
+    setExpanded(prev => ({ ...prev, [i]: !prev[i] }));
+  };
+
+  const analyze = async () => {
     setLoading(true);
 
     try {
       const res = await fetch("/.netlify/functions/generate", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           resumeText,
           jobDescription,
@@ -31,204 +44,115 @@ export default function App() {
       const result = await res.json();
 
       setData({
-        score: result?.score || 0,
-        coverage: result?.coverage || 0,
+        score: result?.score ?? 0,
+        coverage: result?.coverage ?? 0,
         requirements: Array.isArray(result?.requirements)
           ? result.requirements
           : [],
-        error: result?.error || false,
-        message: result?.message || "",
+        error: result?.error ?? false,
       });
-    } catch (err) {
-      console.error("Frontend error:", err);
+
+    } catch (e) {
+      console.error("Analyze failed:", e);
 
       setData({
         score: 0,
         coverage: 0,
         requirements: [],
         error: true,
-        message: "Failed to fetch results",
       });
     }
 
     setLoading(false);
   };
 
-  // ==============================
-  // SAFE HELPERS
-  // ==============================
-
   const safeRequirements = Array.isArray(data?.requirements)
     ? data.requirements
     : [];
 
-  // ==============================
-  // RENDER
-  // ==============================
-
   return (
-    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
+    <div style={{ padding: 20 }}>
       <h1>NarrativeOS</h1>
 
-      {/* INPUTS */}
-      <div style={{ marginBottom: 20 }}>
-        <textarea
-          placeholder="Paste Resume"
-          value={resumeText}
-          onChange={(e) => setResumeText(e.target.value)}
-          rows={10}
-          style={{ width: "100%", marginBottom: 10 }}
-        />
+      {/* RESUME */}
+      <textarea
+        placeholder="Paste Resume"
+        rows={6}
+        style={{ width: "100%" }}
+        value={resumeText}
+        onChange={(e) => setResumeText(e.target.value)}
+      />
 
-        <textarea
-          placeholder="Paste Job Description"
-          value={jobDescription}
-          onChange={(e) => setJobDescription(e.target.value)}
-          rows={10}
-          style={{ width: "100%", marginBottom: 10 }}
-        />
+      {/* JOB DESCRIPTION */}
+      <textarea
+        placeholder="Paste Job Description"
+        rows={6}
+        style={{ width: "100%", marginTop: 10 }}
+        value={jobDescription}
+        onChange={(e) => setJobDescription(e.target.value)}
+      />
 
-        <button onClick={handleAnalyze} disabled={loading}>
-          {loading ? "Analyzing..." : "Analyze"}
-        </button>
-      </div>
+      {/* BUTTON */}
+      <button
+        onClick={analyze}
+        disabled={loading}
+        style={{ marginTop: 10 }}
+      >
+        {loading ? "Analyzing..." : "Analyze"}
+      </button>
 
       {/* ERROR */}
       {data.error && (
-        <div style={{ color: "red", marginBottom: 20 }}>
-          {data.message || "Something went wrong"}
-        </div>
+        <p style={{ color: "red" }}>
+          Something went wrong. Try again.
+        </p>
       )}
 
       {/* SCORE */}
-      {!data.error && (
-        <div style={{ marginBottom: 20 }}>
-          <h2>Score: {data.score} / 10</h2>
-          <p>Coverage: {(data.coverage * 100).toFixed(0)}%</p>
-        </div>
-      )}
+      <h2>Score: {data.score}/10</h2>
 
-      {/* REQUIREMENTS */}
-      <div>
-        {safeRequirements.map((req, i) => {
-          const ranked = Array.isArray(req?.rankedBullets)
-            ? req.rankedBullets
-            : [];
+      {/* RESULTS */}
+      {safeRequirements.map((req, i) => {
+        const ranked = Array.isArray(req?.rankedBullets)
+          ? req.rankedBullets
+          : [];
 
-          const best = ranked[0];
+        const best = ranked[0];
 
-          return (
+        return (
+          <div
+            key={i}
+            style={{
+              border: "1px solid #ccc",
+              marginTop: 10,
+              padding: 10,
+            }}
+          >
             <div
-              key={i}
-              style={{
-                border: "1px solid #ccc",
-                padding: 15,
-                marginBottom: 15,
-                borderRadius: 6,
-              }}
+              onClick={() => toggle(i)}
+              style={{ cursor: "pointer" }}
             >
-              {/* REQUIREMENT */}
-              <h3>Requirement</h3>
-              <p>{req?.requirement || "N/A"}</p>
-
-              {/* CAPABILITY */}
-              <p>
-                <strong>Capability:</strong>{" "}
-                {req?.capability || "GENERAL"}
-              </p>
-
-              {/* BEST BULLET */}
-              {best && (
-                <div
-                  style={{
-                    background: "#f5f5f5",
-                    padding: 10,
-                    marginBottom: 10,
-                    borderRadius: 4,
-                  }}
-                >
-                  <strong>⭐ Best Match</strong>
-                  <p>{best.text}</p>
-                  <p>
-                    Score: {best.score.toFixed(2)}
-                  </p>
-                </div>
-              )}
-
-              {/* RANKED BULLETS */}
-              <div>
-                <strong>Top Matches</strong>
-
-                {ranked.map((b, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      marginTop: 8,
-                      padding: 8,
-                      border: "1px solid #eee",
-                      borderRadius: 4,
-                    }}
-                  >
-                    <p>{b.text}</p>
-
-                    <small>
-                      Score: {b.score.toFixed(2)} | Emb:{" "}
-                      {b.breakdown?.embedding?.toFixed(2)} | Cap:{" "}
-                      {b.breakdown?.capability?.toFixed(2)} | Key:{" "}
-                      {b.breakdown?.keyword?.toFixed(2)}
-                    </small>
-
-                    {/* GAPS */}
-                    {b.gaps?.length > 0 && (
-                      <div style={{ marginTop: 5 }}>
-                        <small>
-                          Missing: {b.gaps.join(", ")}
-                        </small>
-                      </div>
-                    )}
-
-                    {/* DELTA */}
-                    {b.estimatedImprovement > 0 && (
-                      <div>
-                        <small>
-                          Potential Gain: +
-                          {b.estimatedImprovement.toFixed(2)}
-                        </small>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* REWRITE GUIDANCE */}
-              {req?.recommendation?.rewriteGuidance && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 10,
-                    background: "#eef6ff",
-                    borderRadius: 4,
-                  }}
-                >
-                  <strong>Rewrite Guidance</strong>
-
-                  <p>
-                    {req.recommendation.rewriteGuidance.guidance}
-                  </p>
-
-                  <p>
-                    <strong>Focus:</strong>{" "}
-                    {
-                      req.recommendation.rewriteGuidance
-                        .exampleFocus
-                    }
-                  </p>
-                </div>
-              )}
+              <strong>{clean(req.requirement)}</strong>
             </div>
-          );
-        })}
-      </div>
+
+            {expanded[i] && (
+              <>
+                <p>Capability: {req.capability}</p>
+
+                {best && (
+                  <>
+                    <p><strong>Best Evidence</strong></p>
+                    <p>{clean(best.text)}</p>
+                    <p>
+                      Strength: {percent(best.score)}/100
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

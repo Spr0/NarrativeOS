@@ -1,15 +1,11 @@
 [build]
-  command = "npm run build"
+  functions = "netlify/functions"
   publish = "dist"
 
 [functions]
-  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
+# Optional: clean, valid redirect for SPA routing (keeps React working on refresh)
 [[redirects]]
   from = "/*"
   to = "/index.html"

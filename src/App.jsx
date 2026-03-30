@@ -1,159 +1,83 @@
-import { useState } from "react"
-import {
-  parseJD,
-  generateResume
-} from "./narrative_os_engine.js"
+import { useState } from "react";
 
 export default function App() {
-  const [resume, setResume] = useState("")
-  const [jd, setJd] = useState("")
-  const [result, setResult] = useState(null)
-  const [improved, setImproved] = useState(null)
-  const [improvedScore, setImprovedScore] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [stage, setStage] = useState("")
-
-  async function callClaude(system, user) {
-    const res = await fetch("/.netlify/functions/claude", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system, user })
-    })
-
-    const data = await res.json()
-    return data?.text || ""
-  }
+  const [resumeInput, setResumeInput] = useState("");
+  const [jdInput, setJdInput] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleGenerate = async () => {
-    setLoading(true)
-    setResult(null)
-    setImproved(null)
-    setImprovedScore(null)
+    setLoading(true);
 
-    setStage("Analyzing job...")
-    const jdStruct = await parseJD(jd, callClaude)
+    const response = await fetch("/.netlify/functions/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        resume: JSON.parse(resumeInput),
+        requirements: jdInput.split("\n")
+      })
+    });
 
-    setStage("Scoring resume...")
-    const output = await generateResume(
-      resume,
-      jd,
-      [],
-      jdStruct,
-      callClaude
-    )
+    const data = await response.json();
 
-    setResult(output)
-    setLoading(false)
-    setStage("")
-  }
-
-  const handleImprove = async () => {
-    if (!result) return
-
-    setLoading(true)
-    setStage("Improving resume...")
-
-    const missing = result.keywords.filter((_, i) =>
-      result.explain.semanticReasons[i] === "None"
-    )
-
-    const improvedResume = await callClaude(
-      "Improve resume WITHOUT adding fake experience",
-      `Resume:
-${resume}
-
-Missing:
-${missing.join("\n")}
-
-Rules:
-- Do NOT invent experience
-- Strengthen existing experience
-- Improve alignment`
-    )
-
-    setImproved(improvedResume)
-    setLoading(false)
-    setStage("")
-  }
-
-  // 🔥 NEW: Re-score improved resume
-  const handleRescore = async () => {
-    if (!improved) return
-
-    setLoading(true)
-    setStage("Re-scoring improved resume...")
-
-    const jdStruct = await parseJD(jd, callClaude)
-
-    const newScore = await generateResume(
-      improved,
-      jd,
-      [],
-      jdStruct,
-      callClaude
-    )
-
-    setImprovedScore(newScore)
-    setLoading(false)
-    setStage("")
-  }
+    setResult(data);
+    setLoading(false);
+  };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1000, margin: "auto" }}>
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
       <h1>NarrativeOS</h1>
 
+      <h3>Resume JSON</h3>
       <textarea
-        placeholder="Resume"
-        value={resume}
-        onChange={(e) => setResume(e.target.value)}
-        rows={8}
-        style={{ width: "100%", marginBottom: 10 }}
+        rows={10}
+        style={{ width: "100%" }}
+        value={resumeInput}
+        onChange={(e) => setResumeInput(e.target.value)}
       />
 
+      <h3>Job Description (1 requirement per line)</h3>
       <textarea
-        placeholder="Job Description"
-        value={jd}
-        onChange={(e) => setJd(e.target.value)}
-        rows={8}
-        style={{ width: "100%", marginBottom: 10 }}
+        rows={6}
+        style={{ width: "100%" }}
+        value={jdInput}
+        onChange={(e) => setJdInput(e.target.value)}
       />
 
-      <button onClick={handleGenerate}>
-        Analyze Resume
+      <button onClick={handleGenerate} disabled={loading}>
+        {loading ? "Generating..." : "Generate Resume"}
       </button>
 
-      {loading && <div>{stage}</div>}
-
       {result && (
-        <div style={{ marginTop: 20 }}>
-          <h2>Original Score: {result.bestScore}/10</h2>
+        <div style={{ marginTop: 30 }}>
+          <h2>{result.header}</h2>
+          <p>{result.summary}</p>
 
-          <button onClick={handleImprove}>
-            Improve Resume
-          </button>
-        </div>
-      )}
+          <h3>Skills</h3>
+          <ul>
+            {result.skills.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ul>
 
-      {improved && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Improved Resume</h3>
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {improved}
-          </pre>
+          <h3>Experience</h3>
+          {result.roles.map((role, i) => (
+            <div key={i} style={{ marginBottom: 20 }}>
+              <strong>
+                {role.title} — {role.company}
+              </strong>
+              <div>{role.dates}</div>
+              <ul>
+                {role.bullets.map((b, j) => (
+                  <li key={j}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
 
-          <button onClick={handleRescore}>
-            Re-score Improved Resume
-          </button>
-        </div>
-      )}
-
-      {improvedScore && (
-        <div style={{ marginTop: 20 }}>
-          <h2>
-            Improved Score: {improvedScore.bestScore}/10
-          </h2>
+          <h3>Education</h3>
+          <p>{result.education}</p>
         </div>
       )}
     </div>
-  )
+  );
 }

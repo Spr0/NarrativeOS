@@ -1,241 +1,234 @@
 import { useState } from "react";
 
-function App() {
-  const [resumeInput, setResumeInput] = useState("");
-  const [jdInput, setJdInput] = useState("");
-  const [result, setResult] = useState(null);
+export default function App() {
+  const [resumeText, setResumeText] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [data, setData] = useState({
+    score: 0,
+    coverage: 0,
+    requirements: [],
+    error: false,
+    message: "",
+  });
+  const [loading, setLoading] = useState(false);
 
-  const [selectedTrace, setSelectedTrace] = useState(null);
+  // ==============================
+  // SAFE FETCH
+  // ==============================
 
-  const [mode, setMode] = useState("suggested"); // suggested | all | custom
-  const [selectedBullet, setSelectedBullet] = useState(null);
-  const [customBullet, setCustomBullet] = useState("");
+  const handleAnalyze = async () => {
+    setLoading(true);
 
-  function extractRequirements(text) {
-    return text
-      .split(/\n|•|\-|\./)
-      .map(t => t.trim())
-      .filter(t => t.length > 25)
-      .slice(0, 8);
-  }
+    try {
+      const res = await fetch("/.netlify/functions/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          resumeText,
+          jobDescription,
+        }),
+      });
 
-  const handleGenerate = async () => {
-    const res = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        resume: resumeInput,
-        requirements: extractRequirements(jdInput)
-      })
-    });
+      const result = await res.json();
 
-    const data = await res.json();
-    setResult(data);
+      setData({
+        score: result?.score || 0,
+        coverage: result?.coverage || 0,
+        requirements: Array.isArray(result?.requirements)
+          ? result.requirements
+          : [],
+        error: result?.error || false,
+        message: result?.message || "",
+      });
+    } catch (err) {
+      console.error("Frontend error:", err);
 
-    setSelectedTrace(null);
-    setSelectedBullet(null);
-    setCustomBullet("");
-  };
-
-  const handleFix = async () => {
-    let bulletText = "";
-
-    if (mode === "custom") {
-      bulletText = customBullet;
-    } else if (selectedBullet) {
-      bulletText = selectedBullet.text;
+      setData({
+        score: 0,
+        coverage: 0,
+        requirements: [],
+        error: true,
+        message: "Failed to fetch results",
+      });
     }
 
-    if (!bulletText || !selectedTrace) return;
-
-    const res = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        mode: "fix",
-        bullet: bulletText,
-        requirement: selectedTrace.requirement
-      })
-    });
-
-    const data = await res.json();
-
-    // replace if existing bullet
-    let updatedRoles = result.roles;
-
-    if (mode !== "custom") {
-      updatedRoles = result.roles.map((r, ri) => ({
-        ...r,
-        bullets: r.bullets.map((b, bi) => {
-          if (
-            ri === selectedBullet.roleIndex &&
-            bi === selectedBullet.bulletIndex
-          ) {
-            return data.rewritten;
-          }
-          return b;
-        })
-      }));
-    }
-
-    setResult({
-      ...result,
-      roles: updatedRoles
-    });
-
-    setSelectedBullet(null);
-    setCustomBullet("");
+    setLoading(false);
   };
 
-  const allBullets =
-    result?.roles.flatMap((r, ri) =>
-      r.bullets.map((b, bi) => ({
-        text: b,
-        roleIndex: ri,
-        bulletIndex: bi
-      }))
-    ) || [];
+  // ==============================
+  // SAFE HELPERS
+  // ==============================
+
+  const safeRequirements = Array.isArray(data?.requirements)
+    ? data.requirements
+    : [];
+
+  // ==============================
+  // RENDER
+  // ==============================
 
   return (
-    <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ padding: 20, fontFamily: "Arial, sans-serif" }}>
       <h1>NarrativeOS</h1>
 
-      <label><strong>Paste Resume</strong></label>
-      <textarea
-        rows={10}
-        style={{ width: "100%", marginBottom: 10 }}
-        value={resumeInput}
-        onChange={(e) => setResumeInput(e.target.value)}
-      />
+      {/* INPUTS */}
+      <div style={{ marginBottom: 20 }}>
+        <textarea
+          placeholder="Paste Resume"
+          value={resumeText}
+          onChange={(e) => setResumeText(e.target.value)}
+          rows={10}
+          style={{ width: "100%", marginBottom: 10 }}
+        />
 
-      <label><strong>Paste Job Description</strong></label>
-      <textarea
-        rows={6}
-        style={{ width: "100%", marginBottom: 10 }}
-        value={jdInput}
-        onChange={(e) => setJdInput(e.target.value)}
-      />
+        <textarea
+          placeholder="Paste Job Description"
+          value={jobDescription}
+          onChange={(e) => setJobDescription(e.target.value)}
+          rows={10}
+          style={{ width: "100%", marginBottom: 10 }}
+        />
 
-      <button onClick={handleGenerate}>Analyze</button>
+        <button onClick={handleAnalyze} disabled={loading}>
+          {loading ? "Analyzing..." : "Analyze"}
+        </button>
+      </div>
 
-      {result && result.analysis && (
-        <div style={{ marginTop: 30 }}>
-          <h2>{result.header}</h2>
-          <p>{result.summary}</p>
-
-          <h3>Score: {result.analysis.score} / 10</h3>
-
-          {/* STEP 1 */}
-          <h3>Step 1: Select requirement</h3>
-          <ul>
-            {result.analysis.partial.map(req => {
-              const traceItem = result.analysis.trace.find(
-                t => t.requirement === req
-              );
-
-              return (
-                <li
-                  key={req}
-                  onClick={() => {
-                    setSelectedTrace(traceItem);
-                    setSelectedBullet(null);
-                  }}
-                  style={{ cursor: "pointer" }}
-                >
-                  {selectedTrace?.requirement === req ? "✔ " : "○ "}
-                  {req}
-                </li>
-              );
-            })}
-          </ul>
-
-          {/* STEP 2 */}
-          {selectedTrace && (
-            <div>
-              <h3>Step 2: Choose how to improve</h3>
-
-              <div style={{ marginBottom: 10 }}>
-                <button onClick={() => setMode("suggested")}>
-                  Suggested
-                </button>
-                <button onClick={() => setMode("all")}>
-                  All bullets
-                </button>
-                <button onClick={() => setMode("custom")}>
-                  Write your own
-                </button>
-              </div>
-
-              {/* Suggested */}
-              {mode === "suggested" &&
-                selectedTrace.evidence.map((e, i) => (
-                  <div
-                    key={i}
-                    onClick={() => setSelectedBullet(e)}
-                    style={{
-                      cursor: "pointer",
-                      padding: 6,
-                      background:
-                        selectedBullet === e ? "#e3f2fd" : "#fafafa"
-                    }}
-                  >
-                    {e.text}
-                  </div>
-                ))}
-
-              {/* All bullets */}
-              {mode === "all" &&
-                allBullets.map((b, i) => (
-                  <div
-                    key={i}
-                    onClick={() => setSelectedBullet(b)}
-                    style={{
-                      cursor: "pointer",
-                      padding: 6,
-                      background:
-                        selectedBullet === b ? "#e3f2fd" : "#fafafa"
-                    }}
-                  >
-                    {b.text}
-                  </div>
-                ))}
-
-              {/* Custom */}
-              {mode === "custom" && (
-                <textarea
-                  rows={4}
-                  style={{ width: "100%" }}
-                  placeholder="Write or paste your own bullet..."
-                  value={customBullet}
-                  onChange={(e) => setCustomBullet(e.target.value)}
-                />
-              )}
-            </div>
-          )}
-
-          {/* STEP 3 */}
-          {selectedTrace && (
-            <div style={{ marginTop: 20 }}>
-              <button onClick={handleFix}>
-                🔧 Improve bullet
-              </button>
-            </div>
-          )}
-
-          {/* EXPERIENCE */}
-          <h3 style={{ marginTop: 30 }}>Experience</h3>
-          {result.roles.map((r, i) => (
-            <div key={i}>
-              <strong>{r.title}</strong>
-              <ul>
-                {r.bullets.map((b, j) => (
-                  <li key={j}>{b}</li>
-                ))}
-              </ul>
-            </div>
-          ))}
+      {/* ERROR */}
+      {data.error && (
+        <div style={{ color: "red", marginBottom: 20 }}>
+          {data.message || "Something went wrong"}
         </div>
       )}
+
+      {/* SCORE */}
+      {!data.error && (
+        <div style={{ marginBottom: 20 }}>
+          <h2>Score: {data.score} / 10</h2>
+          <p>Coverage: {(data.coverage * 100).toFixed(0)}%</p>
+        </div>
+      )}
+
+      {/* REQUIREMENTS */}
+      <div>
+        {safeRequirements.map((req, i) => {
+          const ranked = Array.isArray(req?.rankedBullets)
+            ? req.rankedBullets
+            : [];
+
+          const best = ranked[0];
+
+          return (
+            <div
+              key={i}
+              style={{
+                border: "1px solid #ccc",
+                padding: 15,
+                marginBottom: 15,
+                borderRadius: 6,
+              }}
+            >
+              {/* REQUIREMENT */}
+              <h3>Requirement</h3>
+              <p>{req?.requirement || "N/A"}</p>
+
+              {/* CAPABILITY */}
+              <p>
+                <strong>Capability:</strong>{" "}
+                {req?.capability || "GENERAL"}
+              </p>
+
+              {/* BEST BULLET */}
+              {best && (
+                <div
+                  style={{
+                    background: "#f5f5f5",
+                    padding: 10,
+                    marginBottom: 10,
+                    borderRadius: 4,
+                  }}
+                >
+                  <strong>⭐ Best Match</strong>
+                  <p>{best.text}</p>
+                  <p>
+                    Score: {best.score.toFixed(2)}
+                  </p>
+                </div>
+              )}
+
+              {/* RANKED BULLETS */}
+              <div>
+                <strong>Top Matches</strong>
+
+                {ranked.map((b, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      border: "1px solid #eee",
+                      borderRadius: 4,
+                    }}
+                  >
+                    <p>{b.text}</p>
+
+                    <small>
+                      Score: {b.score.toFixed(2)} | Emb:{" "}
+                      {b.breakdown?.embedding?.toFixed(2)} | Cap:{" "}
+                      {b.breakdown?.capability?.toFixed(2)} | Key:{" "}
+                      {b.breakdown?.keyword?.toFixed(2)}
+                    </small>
+
+                    {/* GAPS */}
+                    {b.gaps?.length > 0 && (
+                      <div style={{ marginTop: 5 }}>
+                        <small>
+                          Missing: {b.gaps.join(", ")}
+                        </small>
+                      </div>
+                    )}
+
+                    {/* DELTA */}
+                    {b.estimatedImprovement > 0 && (
+                      <div>
+                        <small>
+                          Potential Gain: +
+                          {b.estimatedImprovement.toFixed(2)}
+                        </small>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* REWRITE GUIDANCE */}
+              {req?.recommendation?.rewriteGuidance && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 10,
+                    background: "#eef6ff",
+                    borderRadius: 4,
+                  }}
+                >
+                  <strong>Rewrite Guidance</strong>
+
+                  <p>
+                    {req.recommendation.rewriteGuidance.guidance}
+                  </p>
+
+                  <p>
+                    <strong>Focus:</strong>{" "}
+                    {
+                      req.recommendation.rewriteGuidance
+                        .exampleFocus
+                    }
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
-
-export default App;

@@ -1,184 +1,64 @@
-// netlify/functions/generate.js
+export async function handler(event) {
+  try {
+    const body = JSON.parse(event.body || "{}");
 
-import OpenAI from "openai";
-import { runNarrativeOS } from "./narrative_os_engine.js";
+    if (body.mode === "gap") {
+      const prompt = `
+You are a senior recruiter evaluating ONE requirement.
 
-// ==============================
-// INIT OPENAI
-// ==============================
+RULES:
+- Only flag a gap if it is clearly missing
+- If transferable experience exists → NOT a gap
+- Be concise and practical
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+Return JSON ONLY:
 
-// ==============================
-// SAFE RESPONSE BUILDER
-// ==============================
-
-function buildSafeResponse(overrides = {}) {
-  return {
-    score: 0,
-    coverage: 0,
-    requirements: [],
-    error: false,
-    message: "",
-    ...overrides,
-  };
+{
+  "isGap": true/false,
+  "summary": "short evidence summary",
+  "gap": "missing piece (if real)",
+  "fix": "how to address or rewrite resume"
 }
 
-// ==============================
-// HANDLER
-// ==============================
+Requirement:
+${body.requirement}
 
-export async function handler(event) {
-  console.log("=== NarrativeOS Generate Function Invoked ===");
+Resume:
+${body.resumeText}
+`;
 
-  try {
-    // ------------------------------
-    // METHOD CHECK
-    // ------------------------------
-    if (event.httpMethod !== "POST") {
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Only POST requests are allowed",
-          })
-        ),
-      };
-    }
-
-    // ------------------------------
-    // ENV CHECK
-    // ------------------------------
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("❌ Missing OPENAI_API_KEY");
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Server misconfiguration: missing API key",
-          })
-        ),
-      };
-    }
-
-    console.log("✅ OpenAI key present");
-
-    // ------------------------------
-    // PARSE BODY
-    // ------------------------------
-    let body;
-
-    try {
-      body = JSON.parse(event.body || "{}");
-    } catch (err) {
-      console.error("❌ Failed to parse request body", err);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Invalid JSON body",
-          })
-        ),
-      };
-    }
-
-    const { resumeText, jobDescription } = body;
-
-    // ------------------------------
-    // INPUT VALIDATION
-    // ------------------------------
-    if (!resumeText || !jobDescription) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Missing resumeText or jobDescription",
-          })
-        ),
-      };
-    }
-
-    console.log("📄 Resume length:", resumeText.length);
-    console.log("📄 JD length:", jobDescription.length);
-
-    // ------------------------------
-    // RUN ENGINE
-    // ------------------------------
-    let result;
-
-    try {
-      result = await runNarrativeOS({
-        resumeText,
-        jobDescription,
-        openai,
-      });
-    } catch (engineError) {
-      console.error("❌ ENGINE FAILURE:", engineError);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Engine processing failed",
-          })
-        ),
-      };
-    }
-
-    // ------------------------------
-    // FINAL SAFETY CHECK
-    // ------------------------------
-    if (!result || !result.requirements) {
-      console.error("❌ Invalid engine output:", result);
-
-      return {
-        statusCode: 200,
-        body: JSON.stringify(
-          buildSafeResponse({
-            error: true,
-            message: "Invalid engine output",
-          })
-        ),
-      };
-    }
-
-    console.log("✅ Engine success");
-    console.log("📊 Score:", result.score);
-
-    // ------------------------------
-    // SUCCESS RESPONSE
-    // ------------------------------
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        ...buildSafeResponse(),
-        ...result,
-      }),
-    };
-
-  } catch (fatalError) {
-    // ------------------------------
-    // GLOBAL CATCH (NEVER 502)
-    // ------------------------------
-    console.error("💥 FATAL ERROR:", fatalError);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify(
-        buildSafeResponse({
-          error: true,
-          message: "Unexpected server error",
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5",
+          max_tokens: 500,
+          messages: [{ role: "user", content: prompt }]
         })
-      ),
+      });
+
+      const data = await res.json();
+
+      const text = data.content?.[0]?.text || "{}";
+
+      const match = text.match(/\{[\s\S]*\}/);
+
+      return {
+        statusCode: 200,
+        body: match ? match[0] : "{}"
+      };
+    }
+
+    return { statusCode: 400, body: "Invalid mode" };
+
+  } catch (e) {
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: e.message })
     };
   }
 }

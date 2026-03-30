@@ -4,7 +4,10 @@ function App() {
   const [resumeInput, setResumeInput] = useState("");
   const [jdInput, setJdInput] = useState("");
   const [result, setResult] = useState(null);
+
   const [selectedTrace, setSelectedTrace] = useState(null);
+  const [selectedBullet, setSelectedBullet] = useState(null);
+  const [beforeAfter, setBeforeAfter] = useState(null);
 
   function extractRequirements(text) {
     return text
@@ -25,51 +28,61 @@ function App() {
 
     const data = await res.json();
     setResult(data);
+    setBeforeAfter(null);
   };
 
   const handleFix = async () => {
-    if (!selectedTrace || !selectedTrace.evidence.length) return;
-
-    const bullet = selectedTrace.evidence[0].text;
-    const requirement = selectedTrace.requirement;
+    if (!selectedBullet || !selectedTrace) return;
 
     const res = await fetch("/.netlify/functions/generate", {
       method: "POST",
       body: JSON.stringify({
         mode: "fix",
-        bullet,
-        requirement
+        bullet: selectedBullet.text,
+        requirement: selectedTrace.requirement
       })
     });
 
     const data = await res.json();
 
-    // 🔥 replace bullet in UI
-    const updatedRoles = result.roles.map(r => ({
+    // update roles
+    const updatedRoles = result.roles.map((r, ri) => ({
       ...r,
-      bullets: r.bullets.map(b =>
-        b === bullet ? data.rewritten : b
-      )
+      bullets: r.bullets.map((b, bi) => {
+        if (
+          ri === selectedBullet.roleIndex &&
+          bi === selectedBullet.bulletIndex
+        ) {
+          return data.rewritten;
+        }
+        return b;
+      })
     }));
 
+    // 🔥 re-score automatically
+    const rescore = await fetch("/.netlify/functions/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        resume: resumeInput,
+        requirements: extractRequirements(jdInput)
+      })
+    });
+
+    const rescored = await rescore.json();
+
+    setBeforeAfter({
+      before: selectedBullet.text,
+      after: data.rewritten,
+      oldScore: result.analysis.score,
+      newScore: rescored.analysis.score
+    });
+
     setResult({
-      ...result,
+      ...rescored,
       roles: updatedRoles
     });
-  };
 
-  const renderRequirement = (req) => {
-    const traceItem = result.analysis.trace.find(t => t.requirement === req);
-
-    return (
-      <li
-        key={req}
-        onClick={() => setSelectedTrace(traceItem)}
-        style={{ cursor: "pointer", marginBottom: 6 }}
-      >
-        {req}
-      </li>
-    );
+    setSelectedBullet(null);
   };
 
   return (
@@ -97,24 +110,69 @@ function App() {
           <h2>{result.header}</h2>
           <p>{result.summary}</p>
 
-          <h3>Score: {result.analysis.score} / 10</h3>
+          <h3>
+            Score: {result.analysis.score} / 10
+          </h3>
 
           <h4>⚠️ Partial</h4>
           <ul>
-            {result.analysis.partial.map(renderRequirement)}
+            {result.analysis.partial.map((req) => {
+              const traceItem = result.analysis.trace.find(
+                t => t.requirement === req
+              );
+
+              return (
+                <li
+                  key={req}
+                  onClick={() => {
+                    setSelectedTrace(traceItem);
+                    setSelectedBullet(null);
+                  }}
+                  style={{ cursor: "pointer", marginBottom: 6 }}
+                >
+                  {req}
+                </li>
+              );
+            })}
           </ul>
 
           {selectedTrace && (
             <div style={{ marginTop: 20 }}>
-              <h4>Evidence</h4>
+              <h4>Evidence (click one)</h4>
 
               {selectedTrace.evidence.map((e, i) => (
-                <p key={i}>• {e.text}</p>
+                <p
+                  key={i}
+                  onClick={() => setSelectedBullet(e)}
+                  style={{
+                    cursor: "pointer",
+                    background:
+                      selectedBullet === e ? "#e0f7fa" : "transparent",
+                    padding: 4
+                  }}
+                >
+                  • {e.text}
+                </p>
               ))}
 
-              <button onClick={handleFix}>
-                🔧 Fix this requirement
+              <button
+                onClick={handleFix}
+                disabled={!selectedBullet}
+                style={{ marginTop: 10 }}
+              >
+                🔧 Fix selected bullet
               </button>
+            </div>
+          )}
+
+          {beforeAfter && (
+            <div style={{ marginTop: 20, border: "1px solid #ccc", padding: 10 }}>
+              <h4>Change</h4>
+              <p><strong>Before:</strong> {beforeAfter.before}</p>
+              <p><strong>After:</strong> {beforeAfter.after}</p>
+              <p>
+                Score: {beforeAfter.oldScore} → {beforeAfter.newScore}
+              </p>
             </div>
           )}
 

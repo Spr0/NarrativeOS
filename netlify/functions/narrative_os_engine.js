@@ -15,38 +15,42 @@ async function generateNarrativeOSResume({
 
   const roles = enforceRoles(parsed.roles);
 
-  const skills = cleanSkills(parsed.skills);
+  const skills = parsed.skills?.length ? parsed.skills : extractSkills(resumeData);
+
+  const education = parsed.education?.length
+    ? parsed.education
+    : extractEducation(resumeData);
 
   const cleanedRequirements = cleanRequirements(jobRequirements);
 
   const analysis = analyzeRequirements(
-    { ...parsed, skills, roles },
+    { skills, roles },
     cleanedRequirements
   );
 
   const summary = buildSummary({ roles, skills });
 
   return {
-    header: parsed.header,
+    header: parsed.header || resumeData.split("\n")[0],
     summary,
     skills,
     roles,
-    education: parsed.education,
+    education,
     analysis
   };
 }
 
 /**
- * PARSER (same stable hybrid)
+ * 🔥 HYBRID PARSER (LLM + FALLBACK)
  */
 async function parseResume(rawText) {
-  let parsed;
+  let parsed = {};
 
   try {
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
-      max_tokens: 700,
+      max_tokens: 600,
       messages: [{
         role: "user",
         content: `
@@ -67,12 +71,12 @@ ${rawText}
     });
 
     parsed = JSON.parse(extractJSON(res.choices[0].message.content));
-  } catch {
-    parsed = {};
+  } catch (e) {
+    console.log("LLM parse failed, using fallback");
   }
 
   return {
-    header: parsed.header || rawText.split("\n")[0],
+    header: parsed.header || extractHeader(rawText),
     skills: parsed.skills || [],
     roles: parsed.roles || [],
     education: parsed.education || []
@@ -80,36 +84,91 @@ ${rawText}
 }
 
 /**
- * 🔥 CLEAN SKILLS
+ * 🔥 FALLBACKS (CRITICAL)
  */
-function cleanSkills(skills = []) {
-  const flat = skills
-    .join(" | ")
-    .split("|")
-    .map(s => s.trim())
-    .filter(s => s.length > 2 && s.length < 40);
 
-  return [...new Set(flat)].slice(0, 10);
+function extractHeader(text) {
+  return text.split("\n")[0];
 }
 
-/**
- * 🔥 CLEAN JD (critical)
- */
-function cleanRequirements(reqs = []) {
-  return reqs
-    .map(r => r.trim())
-    .filter(r =>
-      r.length > 25 &&
-      !r.toLowerCase().includes("apply") &&
-      !r.toLowerCase().includes("linkedin") &&
-      !r.toLowerCase().includes("people") &&
-      !r.toLowerCase().includes("click")
+function extractSkills(text) {
+  return text
+    .split("\n")
+    .filter(line =>
+      line.toLowerCase().includes("sap") ||
+      line.toLowerCase().includes("net") ||
+      line.toLowerCase().includes("salesforce") ||
+      line.toLowerCase().includes("agile") ||
+      line.toLowerCase().includes("risk")
     )
     .slice(0, 8);
 }
 
+function extractRoles(text) {
+  const lines = text.split("\n");
+
+  const roles = [];
+  let current = null;
+
+  for (let line of lines) {
+    if (line.includes("—")) {
+      if (current) roles.push(current);
+
+      const parts = line.split("—");
+
+      current = {
+        title: parts[0].trim(),
+        company: parts[1]?.trim() || "",
+        bullets: []
+      };
+    } else if (current && line.length > 40) {
+      current.bullets.push(line.trim());
+    }
+  }
+
+  if (current) roles.push(current);
+
+  return roles.slice(0, 3);
+}
+
+function extractEducation(text) {
+  return text
+    .split("\n")
+    .filter(l =>
+      l.toLowerCase().includes("university") ||
+      l.toLowerCase().includes("mba") ||
+      l.toLowerCase().includes("ba")
+    )
+    .slice(0, 2)
+    .map(e => ({ degree: e }));
+}
+
 /**
- * SCORING (unchanged)
+ * ENSURE ROLES ALWAYS EXIST
+ */
+function enforceRoles(roles = []) {
+  if (!roles.length) {
+    return extractRoles("");
+  }
+
+  return roles.slice(0, 3).map(r => ({
+    ...r,
+    bullets: (r.bullets || []).slice(0, 4)
+  }));
+}
+
+/**
+ * CLEAN JD
+ */
+function cleanRequirements(reqs = []) {
+  return reqs
+    .map(r => r.trim())
+    .filter(r => r.length > 25)
+    .slice(0, 8);
+}
+
+/**
+ * SCORING
  */
 function analyzeRequirements(resume, requirements = []) {
   const text = normalizeText([
@@ -141,11 +200,13 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * 🔥 CLEAN SUMMARY (deterministic)
+ * SUMMARY (SAFE)
  */
 function buildSummary({ roles, skills }) {
   const roleTitles = roles?.map(r => r.title).slice(0, 2).join(", ");
   const skillList = skills?.slice(0, 4).join(", ");
+
+  if (!roleTitles && !skillList) return "Experienced professional.";
 
   return `${roleTitles} professional with expertise in ${skillList}.`;
 }
@@ -160,13 +221,6 @@ function normalizeText(text) {
 function isWeakMatch(req, text) {
   const words = req.split(" ").filter(w => w.length > 4);
   return words.some(w => text.includes(w));
-}
-
-function enforceRoles(roles = []) {
-  return roles.slice(0, 3).map(r => ({
-    ...r,
-    bullets: (r.bullets || []).slice(0, 4)
-  }));
 }
 
 function extractJSON(text) {

@@ -1,3 +1,4 @@
+console.log("🚀 NEW ENGINE RUNNING")
 // --- SAFE FETCH ---
 async function safeJsonFetch(url, body) {
   try {

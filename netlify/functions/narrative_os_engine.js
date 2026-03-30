@@ -19,7 +19,7 @@ async function generateNarrativeOSResume({
 
   const analysis = analyzeRequirements(normalized, jobRequirements);
 
-  const summary = await generateSummary(normalized, jobRequirements);
+  const summary = buildSummary(normalized);
 
   return {
     header: normalized.header || "Candidate",
@@ -32,19 +32,21 @@ async function generateNarrativeOSResume({
 }
 
 /**
- * PARSER (same working version)
+ * 🔥 FAST PARSER (single LLM call)
  */
 async function parseResume(rawText) {
   try {
     const prompt = `
-You are a resume parser.
+Extract structured resume data.
 
-STRICT RULES:
-- Extract REAL content only
-- DO NOT invent experience
-- ALWAYS extract roles if present
+RULES:
+- No hallucination
+- Extract real roles, skills, education
+- Max 3 roles
+- Max 4 bullets per role
+- SHORT output
 
-FORMAT (VALID JSON ONLY):
+FORMAT (JSON ONLY):
 {
   "header": "",
   "skills": [],
@@ -66,6 +68,7 @@ ${rawText}
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
+      max_tokens: 700, // 🔥 prevents long responses
       messages: [{ role: "user", content: prompt }]
     });
 
@@ -107,7 +110,17 @@ function enforceRoles(roles = []) {
 }
 
 /**
- * 🔥 REQUIREMENT ANALYSIS (NEW CORE)
+ * 🔥 INSTANT SUMMARY (no LLM)
+ */
+function buildSummary(resume) {
+  const roles = resume.roles?.map(r => r.title).join(", ") || "";
+  const skills = resume.skills?.slice(0, 5).join(", ") || "";
+
+  return `${roles} professional with experience in ${skills}.`;
+}
+
+/**
+ * SCORING
  */
 function analyzeRequirements(resume, requirements = []) {
   const resumeText = [
@@ -133,8 +146,7 @@ function analyzeRequirements(resume, requirements = []) {
 
   const total = requirements.length || 1;
   const coverage = Math.round(((matched.length + partial.length * 0.5) / total) * 100);
-
-  const score = Math.round((coverage / 10) * 10) / 10; // scale to 0–10
+  const score = Math.round((coverage / 10) * 10) / 10;
 
   return {
     score,
@@ -146,7 +158,7 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * SIMPLE PARTIAL MATCH
+ * PARTIAL MATCH
  */
 function hasPartialMatch(req, text) {
   const words = req.split(" ").filter(w => w.length > 4);
@@ -154,41 +166,7 @@ function hasPartialMatch(req, text) {
 }
 
 /**
- * SUMMARY
- */
-async function generateSummary(resume, jobRequirements) {
-  try {
-    const prompt = `
-Write a concise summary (max 60 words).
-
-- Use real experience only
-- No placeholders
-- Align with job requirements
-
-ROLES:
-${resume.roles?.map(r => r.title).join(", ")}
-
-SKILLS:
-${resume.skills?.join(", ")}
-
-JOB:
-${jobRequirements?.slice(0, 5).join(", ")}
-`;
-
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.3,
-      messages: [{ role: "user", content: prompt }]
-    });
-
-    return res.choices[0].message.content.trim();
-  } catch {
-    return "";
-  }
-}
-
-/**
- * CLEAN JSON
+ * JSON CLEAN
  */
 function extractJSON(text) {
   const match = text.match(/\{[\s\S]*\}/);

@@ -1,158 +1,191 @@
 import { useState } from "react";
 
-function clean(text = "") {
-  return text.replace(/^com\s+/i, "").trim();
+// ─────────────────────────────────────────
+// SAFE HELPERS
+// ─────────────────────────────────────────
+
+function safeArray(arr) {
+  return Array.isArray(arr) ? arr : [];
 }
 
-function percent(score) {
-  return Math.round((score || 0) * 100);
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
 }
+
+// ─────────────────────────────────────────
+// COMPONENTS
+// ─────────────────────────────────────────
+
+function RequirementCard({ item }) {
+  const [open, setOpen] = useState(false);
+
+  const score = clamp(item.score || 0, 0, 100);
+
+  const color =
+    score >= 85 ? "#22c55e" :
+    score >= 70 ? "#84cc16" :
+    score >= 55 ? "#f59e0b" :
+    score >= 40 ? "#f97316" : "#ef4444";
+
+  return (
+    <div style={{
+      border: "1px solid #ddd",
+      borderRadius: 10,
+      padding: 16,
+      marginBottom: 12,
+      background: "#fff"
+    }}>
+      {/* HEADER */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>
+            {item.requirement}
+          </div>
+
+          <div style={{ fontSize: 13, color: "#555" }}>
+            {item.summary || "No strong evidence found"}
+          </div>
+        </div>
+
+        <div style={{
+          minWidth: 60,
+          textAlign: "center",
+          fontWeight: 700,
+          color,
+          fontSize: 18
+        }}>
+          {score}
+          <div style={{ fontSize: 11, fontWeight: 400 }}>Strength</div>
+        </div>
+      </div>
+
+      {/* EXPAND BUTTON */}
+      <div style={{ marginTop: 10 }}>
+        <button
+          onClick={() => setOpen(!open)}
+          style={{
+            fontSize: 12,
+            background: "none",
+            border: "none",
+            color: "#2563eb",
+            cursor: "pointer"
+          }}
+        >
+          {open ? "Hide details" : "Show details"}
+        </button>
+      </div>
+
+      {/* DETAILS */}
+      {open && (
+        <div style={{ marginTop: 12, fontSize: 14 }}>
+          {item.gap && (
+            <div style={{ marginBottom: 10 }}>
+              <strong style={{ color: "#dc2626" }}>Gap:</strong>
+              <div>{item.gap}</div>
+            </div>
+          )}
+
+          {item.fix && (
+            <div>
+              <strong style={{ color: "#16a34a" }}>How to Improve:</strong>
+              <div>{item.fix}</div>
+            </div>
+          )}
+
+          {!item.gap && (
+            <div style={{ color: "#16a34a" }}>
+              Strong match — no critical gaps detected
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+// MAIN APP
+// ─────────────────────────────────────────
 
 export default function App() {
+  const [jobText, setJobText] = useState("");
   const [resumeText, setResumeText] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
 
-  const [data, setData] = useState({
-    score: 0,
-    coverage: 0,
-    requirements: [],
-    error: false,
-  });
-
-  const [expanded, setExpanded] = useState({});
-
-  const toggle = (i) => {
-    setExpanded(prev => ({ ...prev, [i]: !prev[i] }));
-  };
-
-  const analyze = async () => {
+  async function handleAnalyze() {
     setLoading(true);
+    setResult(null);
 
     try {
-      const res = await fetch("/.netlify/functions/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          resumeText,
-          jobDescription,
-        }),
-      });
+      const { analyzeJob } = await import("../narrative_os_engine.js");
 
-      const result = await res.json();
+      const data = await analyzeJob(jobText, resumeText);
 
-      setData({
-        score: result?.score ?? 0,
-        coverage: result?.coverage ?? 0,
-        requirements: Array.isArray(result?.requirements)
-          ? result.requirements
-          : [],
-        error: result?.error ?? false,
-      });
-
+      setResult(data);
     } catch (e) {
       console.error("Analyze failed:", e);
-
-      setData({
-        score: 0,
-        coverage: 0,
-        requirements: [],
-        error: true,
-      });
+      setResult({ error: "Analysis failed. Check console." });
     }
 
     setLoading(false);
-  };
+  }
 
-  const safeRequirements = Array.isArray(data?.requirements)
-    ? data.requirements
-    : [];
+  const requirements = safeArray(result?.requirements);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>NarrativeOS</h1>
+    <div style={{ maxWidth: 900, margin: "40px auto", padding: 20 }}>
+      <h1 style={{ marginBottom: 20 }}>Resume Match Analyzer</h1>
 
-      {/* RESUME */}
-      <textarea
-        placeholder="Paste Resume"
-        rows={6}
-        style={{ width: "100%" }}
-        value={resumeText}
-        onChange={(e) => setResumeText(e.target.value)}
-      />
+      {/* INPUTS */}
+      <div style={{ marginBottom: 20 }}>
+        <textarea
+          placeholder="Paste job description..."
+          value={jobText}
+          onChange={(e) => setJobText(e.target.value)}
+          style={{ width: "100%", height: 120, marginBottom: 10 }}
+        />
 
-      {/* JOB DESCRIPTION */}
-      <textarea
-        placeholder="Paste Job Description"
-        rows={6}
-        style={{ width: "100%", marginTop: 10 }}
-        value={jobDescription}
-        onChange={(e) => setJobDescription(e.target.value)}
-      />
+        <textarea
+          placeholder="Paste resume..."
+          value={resumeText}
+          onChange={(e) => setResumeText(e.target.value)}
+          style={{ width: "100%", height: 120 }}
+        />
+      </div>
 
       {/* BUTTON */}
       <button
-        onClick={analyze}
-        disabled={loading}
-        style={{ marginTop: 10 }}
+        onClick={handleAnalyze}
+        disabled={loading || !jobText || !resumeText}
+        style={{
+          padding: "10px 20px",
+          fontSize: 16,
+          cursor: "pointer"
+        }}
       >
         {loading ? "Analyzing..." : "Analyze"}
       </button>
 
-      {/* ERROR */}
-      {data.error && (
-        <p style={{ color: "red" }}>
-          Something went wrong. Try again.
-        </p>
+      {/* RESULTS */}
+      {result && !result.error && (
+        <div style={{ marginTop: 30 }}>
+          <h2>Score: {result.score}/10</h2>
+
+          <div style={{ marginTop: 20 }}>
+            {requirements.map((r, i) => (
+              <RequirementCard key={i} item={r} />
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* SCORE */}
-      <h2>Score: {data.score}/10</h2>
-
-      {/* RESULTS */}
-      {safeRequirements.map((req, i) => {
-        const ranked = Array.isArray(req?.rankedBullets)
-          ? req.rankedBullets
-          : [];
-
-        const best = ranked[0];
-
-        return (
-          <div
-            key={i}
-            style={{
-              border: "1px solid #ccc",
-              marginTop: 10,
-              padding: 10,
-            }}
-          >
-            <div
-              onClick={() => toggle(i)}
-              style={{ cursor: "pointer" }}
-            >
-              <strong>{clean(req.requirement)}</strong>
-            </div>
-
-            {expanded[i] && (
-              <>
-                <p>Capability: {req.capability}</p>
-
-                {best && (
-                  <>
-                    <p><strong>Best Evidence</strong></p>
-                    <p>{clean(best.text)}</p>
-                    <p>
-                      Strength: {percent(best.score)}/100
-                    </p>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
+      {/* ERROR */}
+      {result?.error && (
+        <div style={{ color: "red", marginTop: 20 }}>
+          {result.error}
+        </div>
+      )}
     </div>
   );
 }

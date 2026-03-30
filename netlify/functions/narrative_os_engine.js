@@ -1,347 +1,138 @@
-// narrative_os_engine.js
+// NarrativeOS Engine vNext — Hybrid Scoring + True Gap Reasoning
 
-// ==============================
+// ─────────────────────────────────────────────────────────────
 // CONFIG
-// ==============================
+// ─────────────────────────────────────────────────────────────
 
-const GENERIC_PHRASES = [
-  "program governance",
-  "stakeholders",
-  "cross-functional",
-  "delivery excellence",
-  "strategic alignment"
+const STOPWORDS = [
+  "address", "phone", "email", "linkedin",
+  "anjali", "recruiter", "pyramid consulting",
+  "please review", "forward your resume"
 ];
 
-const CAPABILITY_RULES = [
-  {
-    name: "PROGRAM_DELIVERY",
-    signals: ["program", "delivery", "roadmap", "execution"],
-    guidance: "Clarify ownership of delivery, scope, and measurable outcomes."
-  },
-  {
-    name: "DEPENDENCY_MANAGEMENT",
-    signals: ["dependency", "dependencies", "blockers"],
-    guidance: "Show how dependencies were identified, managed, and resolved."
-  },
-  {
-    name: "STAKEHOLDER_MANAGEMENT",
-    signals: ["stakeholder", "executive", "alignment"],
-    guidance: "Highlight stakeholder groups, influence, and alignment outcomes."
-  },
-  {
-    name: "PROCESS_OPTIMIZATION",
-    signals: ["optimize", "improve", "efficiency", "process"],
-    guidance: "Quantify improvements and describe what changed and why."
+const CAPABILITY_MAP = {
+  PROGRAM_DELIVERY: ["delivery", "implementation", "execution", "erp", "program"],
+  STAKEHOLDER: ["stakeholder", "executive", "c-suite", "board"],
+  GOVERNANCE: ["governance", "risk", "compliance", "controls"],
+  TECHNICAL: ["sap", "netsuite", "salesforce", "platform"],
+  TRANSFORMATION: ["transformation", "migration", "modernization"]
+};
+
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+
+function cleanText(text = "") {
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/<[^>]*>/g, "")
+    .trim();
+}
+
+function isGarbage(text = "") {
+  const t = text.toLowerCase();
+  return STOPWORDS.some(w => t.includes(w)) || t.length < 30;
+}
+
+function detectCapability(req) {
+  const lower = req.toLowerCase();
+  for (const [cap, words] of Object.entries(CAPABILITY_MAP)) {
+    if (words.some(w => lower.includes(w))) return cap;
   }
-];
-
-// ==============================
-// UTIL
-// ==============================
-
-function cosineSimilarity(a, b) {
-  let dot = 0, normA = 0, normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  return "GENERAL";
 }
 
-function isGenericBullet(text) {
-  const lower = text.toLowerCase();
-  return GENERIC_PHRASES.some(p => lower.includes(p));
+function keywordScore(req, resume) {
+  const words = req.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+  let hits = 0;
+
+  words.forEach(w => {
+    if (resume.toLowerCase().includes(w)) hits++;
+  });
+
+  return Math.min(1, hits / (words.length || 1));
 }
 
-// ==============================
-// CAPABILITY EXTRACTION
-// ==============================
+// ─────────────────────────────────────────────────────────────
+// LLM GAP EXTRACTION (THE IMPORTANT PART)
+// ─────────────────────────────────────────────────────────────
 
-function extractCapabilities(text) {
-  const lower = text.toLowerCase();
-
-  const caps = CAPABILITY_RULES.map(rule => {
-    const matches = rule.signals.filter(s => lower.includes(s));
-    return {
-      name: rule.name,
-      score: matches.length / rule.signals.length,
-      guidance: rule.guidance
-    };
-  }).filter(c => c.score > 0);
-
-  // sort strongest first
-  caps.sort((a, b) => b.score - a.score);
-
-  return caps;
-}
-
-// ==============================
-// KEYWORD SCORE
-// ==============================
-
-function keywordScore(req, bullet) {
-  const reqWords = req.toLowerCase().split(/\W+/);
-  const bulletWords = bullet.toLowerCase();
-
-  let matches = 0;
-
-  for (const w of reqWords) {
-    if (w.length > 4 && bulletWords.includes(w)) {
-      matches++;
-    }
-  }
-
-  return Math.min(matches / 5, 1);
-}
-
-// ==============================
-// CAPABILITY SCORE
-// ==============================
-
-function capabilityScore(reqCaps, bullet) {
-  const text = bullet.toLowerCase();
-
-  let score = 0;
-
-  for (const cap of reqCaps) {
-    if (cap.name === "DEPENDENCY_MANAGEMENT" && text.includes("depend")) {
-      score += 0.4;
-    }
-
-    if (cap.name === "STAKEHOLDER_MANAGEMENT" && text.includes("stakeholder")) {
-      score += 0.3;
-    }
-
-    if (cap.name === "PROGRAM_DELIVERY" && text.includes("program")) {
-      score += 0.3;
-    }
-
-    if (cap.name === "PROCESS_OPTIMIZATION" && text.includes("improv")) {
-      score += 0.3;
-    }
-  }
-
-  return Math.min(score, 1);
-}
-
-// ==============================
-// GAP ANALYSIS (NEW)
-// ==============================
-
-function analyzeGaps(reqCaps, bullet) {
-  const text = bullet.toLowerCase();
-
-  const missing = [];
-
-  for (const cap of reqCaps) {
-    if (cap.name === "DEPENDENCY_MANAGEMENT" && !text.includes("depend")) {
-      missing.push("dependency management");
-    }
-
-    if (cap.name === "STAKEHOLDER_MANAGEMENT" && !text.includes("stakeholder")) {
-      missing.push("stakeholder scope");
-    }
-
-    if (cap.name === "PROGRAM_DELIVERY" && !text.includes("program")) {
-      missing.push("program ownership");
-    }
-
-    if (cap.name === "PROCESS_OPTIMIZATION" && !text.includes("improv")) {
-      missing.push("quantified improvements");
-    }
-  }
-
-  return missing;
-}
-
-// ==============================
-// SCORE DELTA ESTIMATION (NEW)
-// ==============================
-
-function estimateScoreDelta(missing) {
-  let delta = 0;
-
-  for (const gap of missing) {
-    if (gap.includes("dependency")) delta += 0.15;
-    if (gap.includes("stakeholder")) delta += 0.1;
-    if (gap.includes("program")) delta += 0.1;
-    if (gap.includes("improvement")) delta += 0.1;
-  }
-
-  return Math.min(delta, 0.5);
-}
-
-// ==============================
-// REWRITE GUIDANCE (NEW)
-// ==============================
-
-function buildRewriteGuidance(requirement, bullet, missing, capability) {
-  return {
-    instruction: `Rewrite this bullet to better align with the requirement.`,
-    requirement,
-    currentBullet: bullet,
-    improveBy: missing,
-    guidance: capability?.guidance || "Improve specificity and alignment.",
-    exampleFocus: `Ensure the bullet explicitly demonstrates: ${missing.join(", ")}`
-  };
-}
-
-// ==============================
-// MAIN ENGINE
-// ==============================
-
-export async function runNarrativeOS({
-  resumeText,
-  jobDescription,
-  openai
-}) {
-  // ------------------------------
-  // INPUT PARSING
-  // ------------------------------
-
-  const requirements = jobDescription
-    .split("\n")
-    .filter(r => r.trim().length > 20);
-
-  const bullets = resumeText
-    .split("\n")
-    .filter(b => b.trim().startsWith("-"));
-
-  // ------------------------------
-  // EMBEDDINGS
-  // ------------------------------
-
-  const cache = new Map();
-
-  async function getEmbedding(text) {
-    if (cache.has(text)) return cache.get(text);
-
-    const res = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text,
+async function extractGapWithLLM(requirement, resumeText) {
+  try {
+    const res = await fetch("/.netlify/functions/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "gap",
+        requirement,
+        resumeText: resumeText.slice(0, 1500)
+      })
     });
 
-    const emb = res.data[0].embedding;
-    cache.set(text, emb);
-    return emb;
+    const data = await res.json();
+
+    return data || null;
+  } catch {
+    return null;
   }
+}
 
-  const reqEmbeddings = [];
-  for (const r of requirements) {
-    reqEmbeddings.push(await getEmbedding(r));
-  }
+// ─────────────────────────────────────────────────────────────
+// CORE ENGINE
+// ─────────────────────────────────────────────────────────────
 
-  const bulletEmbeddings = [];
-  for (const b of bullets) {
-    bulletEmbeddings.push(await getEmbedding(b));
-  }
+export async function analyzeJob(jobText, resumeText) {
+  const cleanedJD = cleanText(jobText);
 
-  // ------------------------------
-  // SCORING
-  // ------------------------------
+  const rawRequirements = cleanedJD
+    .split(/\n|\.|•|-/)
+    .map(r => r.trim())
+    .filter(r => r.length > 40)
+    .filter(r => !isGarbage(r));
 
-  const bulletUsage = {};
+  const requirements = rawRequirements.slice(0, 12);
+
   const results = [];
 
-  for (let i = 0; i < requirements.length; i++) {
-    const req = requirements[i];
-    const reqEmbedding = reqEmbeddings[i];
+  for (const req of requirements) {
+    const capability = detectCapability(req);
 
-    const reqCaps = extractCapabilities(req);
-    const primaryCap = reqCaps[0];
+    const baseScore = keywordScore(req, resumeText);
 
-    const ranked = [];
+    // Normalize to real range (prevents inflated 80s)
+    let score = Math.round(40 + baseScore * 50); // 40–90 realistic
 
-    for (let j = 0; j < bullets.length; j++) {
-      const bullet = bullets[j];
-      const bulletEmbedding = bulletEmbeddings[j];
+    // Get intelligent gap
+    const gap = await extractGapWithLLM(req, resumeText);
 
-      const embScore = cosineSimilarity(reqEmbedding, bulletEmbedding);
-      const capScore = capabilityScore(reqCaps, bullet);
-      const keyScore = keywordScore(req, bullet);
-
-      let penalty = 0;
-
-      if (bulletUsage[j]) {
-        penalty += 0.15 * bulletUsage[j];
-      }
-
-      if (isGenericBullet(bullet)) {
-        penalty += 0.2;
-      }
-
-      const finalScore =
-        (0.5 * embScore) +
-        (0.3 * capScore) +
-        (0.2 * keyScore) -
-        penalty;
-
-      const missing = analyzeGaps(reqCaps, bullet);
-      const delta = estimateScoreDelta(missing);
-
-      ranked.push({
-        bulletId: j,
-        text: bullet,
-        score: finalScore,
-        breakdown: {
-          embedding: embScore,
-          capability: capScore,
-          keyword: keyScore,
-          penalty: penalty
-        },
-        gaps: missing,
-        estimatedImprovement: delta
-      });
+    if (gap?.isGap) {
+      score -= 15;
+    } else if (baseScore > 0.7) {
+      score += 5;
     }
 
-    ranked.sort((a, b) => b.score - a.score);
-
-    const best = ranked[0];
-    bulletUsage[best.bulletId] =
-      (bulletUsage[best.bulletId] || 0) + 1;
-
-    const rewriteGuidance = buildRewriteGuidance(
-      req,
-      best.text,
-      best.gaps,
-      primaryCap
-    );
+    score = Math.max(0, Math.min(100, score));
 
     results.push({
       requirement: req,
-      capability: primaryCap?.name || "GENERAL",
-      bestBulletId: best.bulletId,
-      rankedBullets: ranked.slice(0, 5),
-      recommendation: {
-        bestBullet: best.text,
-        gaps: best.gaps,
-        estimatedScoreIncrease: best.estimatedImprovement,
-        rewriteGuidance
-      }
+      capability,
+      score,
+      gap: gap?.gap || null,
+      fix: gap?.fix || null,
+      summary: gap?.summary || null
     });
   }
 
-  // ------------------------------
-  // FINAL SCORE
-  // ------------------------------
+  // ─────────────────────────────────────────────────────────────
+  // FINAL SCORE (FIXED)
+  // ─────────────────────────────────────────────────────────────
 
-  let covered = 0;
+  const avg = results.reduce((a, r) => a + r.score, 0) / (results.length || 1);
 
-  for (const r of results) {
-    if (r.rankedBullets[0].score > 0.5) {
-      covered++;
-    }
-  }
-
-  const coverage = covered / requirements.length;
-  const score = Math.round(coverage * 10);
+  const finalScore = Math.round(avg / 10); // converts to 1–10 properly
 
   return {
-    score,
-    coverage,
+    score: finalScore,
     requirements: results
   };
 }

@@ -13,9 +13,9 @@ async function generateNarrativeOSResume({
 }) {
   const parsed = await parseResume(resumeData);
 
-  const roles = enforceRoles(parsed.roles);
+  const roles = normalizeRoles(parsed.roles, resumeData);
 
-  const skills = parsed.skills?.length ? parsed.skills : extractSkills(resumeData);
+  const skills = normalizeSkills(parsed.skills, resumeData);
 
   const education = parsed.education?.length
     ? parsed.education
@@ -28,7 +28,7 @@ async function generateNarrativeOSResume({
     cleanedRequirements
   );
 
-  const summary = buildSummary({ roles, skills });
+  const summary = buildSummary(roles, skills);
 
   return {
     header: parsed.header || resumeData.split("\n")[0],
@@ -41,7 +41,7 @@ async function generateNarrativeOSResume({
 }
 
 /**
- * 🔥 HYBRID PARSER (LLM + FALLBACK)
+ * PARSER (unchanged)
  */
 async function parseResume(rawText) {
   let parsed = {};
@@ -71,12 +71,10 @@ ${rawText}
     });
 
     parsed = JSON.parse(extractJSON(res.choices[0].message.content));
-  } catch (e) {
-    console.log("LLM parse failed, using fallback");
-  }
+  } catch {}
 
   return {
-    header: parsed.header || extractHeader(rawText),
+    header: parsed.header || rawText.split("\n")[0],
     skills: parsed.skills || [],
     roles: parsed.roles || [],
     education: parsed.education || []
@@ -84,26 +82,66 @@ ${rawText}
 }
 
 /**
- * 🔥 FALLBACKS (CRITICAL)
+ * 🔥 ROLE NORMALIZATION (CRITICAL FIX)
  */
+function normalizeRoles(roles = [], rawText) {
+  let final = roles;
 
-function extractHeader(text) {
-  return text.split("\n")[0];
+  // fallback if roles weak
+  if (!roles.length || roles.some(r => !r.bullets || !r.bullets.length)) {
+    final = extractRoles(rawText);
+  }
+
+  return final.slice(0, 3).map(r => ({
+    title: r.title || "",
+    company: r.company || "",
+    dates: r.dates || "",
+    bullets: (r.bullets || [])
+      .filter(b => b.length > 20)
+      .slice(0, 4)
+  }));
 }
 
+/**
+ * 🔥 SKILL CLEANING (FIXES YOUR MAIN ISSUE)
+ */
+function normalizeSkills(skills = [], rawText) {
+  let base = skills;
+
+  // fallback if bad
+  if (!skills.length || skills.some(s => s.length > 80)) {
+    base = extractSkills(rawText);
+  }
+
+  return base
+    .flatMap(s => s.split("|"))
+    .map(s => s.trim())
+    .filter(s =>
+      s.length > 2 &&
+      s.length < 40 &&        // 🔥 removes paragraphs
+      !s.includes(".")        // 🔥 removes sentences
+    )
+    .slice(0, 10);
+}
+
+/**
+ * FALLBACK SKILLS
+ */
 function extractSkills(text) {
   return text
     .split("\n")
     .filter(line =>
+      line.includes("|") ||
       line.toLowerCase().includes("sap") ||
       line.toLowerCase().includes("net") ||
-      line.toLowerCase().includes("salesforce") ||
-      line.toLowerCase().includes("agile") ||
-      line.toLowerCase().includes("risk")
+      line.toLowerCase().includes("salesforce")
     )
-    .slice(0, 8);
+    .slice(0, 6);
 }
 
+/**
+ * FALLBACK ROLES
+ */
 function extractRoles(text) {
   const lines = text.split("\n");
 
@@ -111,14 +149,14 @@ function extractRoles(text) {
   let current = null;
 
   for (let line of lines) {
-    if (line.includes("—")) {
+    if (line.includes("|") && line.match(/[A-Z]/)) {
       if (current) roles.push(current);
 
-      const parts = line.split("—");
+      const parts = line.split("|");
 
       current = {
-        title: parts[0].trim(),
-        company: parts[1]?.trim() || "",
+        title: parts[0]?.trim(),
+        company: parts[1]?.trim(),
         bullets: []
       };
     } else if (current && line.length > 40) {
@@ -128,9 +166,12 @@ function extractRoles(text) {
 
   if (current) roles.push(current);
 
-  return roles.slice(0, 3);
+  return roles;
 }
 
+/**
+ * EDUCATION
+ */
 function extractEducation(text) {
   return text
     .split("\n")
@@ -144,20 +185,6 @@ function extractEducation(text) {
 }
 
 /**
- * ENSURE ROLES ALWAYS EXIST
- */
-function enforceRoles(roles = []) {
-  if (!roles.length) {
-    return extractRoles("");
-  }
-
-  return roles.slice(0, 3).map(r => ({
-    ...r,
-    bullets: (r.bullets || []).slice(0, 4)
-  }));
-}
-
-/**
  * CLEAN JD
  */
 function cleanRequirements(reqs = []) {
@@ -168,7 +195,7 @@ function cleanRequirements(reqs = []) {
 }
 
 /**
- * SCORING
+ * SCORING (unchanged)
  */
 function analyzeRequirements(resume, requirements = []) {
   const text = normalizeText([
@@ -200,13 +227,11 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * SUMMARY (SAFE)
+ * 🔥 CLEAN SUMMARY (FIXED)
  */
-function buildSummary({ roles, skills }) {
-  const roleTitles = roles?.map(r => r.title).slice(0, 2).join(", ");
-  const skillList = skills?.slice(0, 4).join(", ");
-
-  if (!roleTitles && !skillList) return "Experienced professional.";
+function buildSummary(roles, skills) {
+  const roleTitles = roles.map(r => r.title).slice(0, 2).join(", ");
+  const skillList = skills.slice(0, 4).join(", ");
 
   return `${roleTitles} professional with expertise in ${skillList}.`;
 }

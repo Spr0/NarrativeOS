@@ -4,6 +4,7 @@ function App() {
   const [resumeInput, setResumeInput] = useState("");
   const [jdInput, setJdInput] = useState("");
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
 
   const [selectedTrace, setSelectedTrace] = useState(null);
   const [selectedBullet, setSelectedBullet] = useState(null);
@@ -21,16 +22,37 @@ function App() {
       .slice(0, 8);
   }
 
+  async function safeFetch(body) {
+    try {
+      const res = await fetch("/.netlify/functions/generate", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.message || "Server error");
+      }
+
+      return data;
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+      return null;
+    }
+  }
+
   const handleGenerate = async () => {
-    const res = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        resume: resumeInput,
-        requirements: extractRequirements(jdInput)
-      })
+    setError(null);
+
+    const data = await safeFetch({
+      resume: resumeInput,
+      requirements: extractRequirements(jdInput)
     });
 
-    const data = await res.json();
+    if (!data) return;
+
     setResult(data);
     setSelectedTrace(null);
     setSelectedBullet(null);
@@ -40,18 +62,17 @@ function App() {
   const handleFix = async () => {
     if (!selectedBullet || !selectedTrace) return;
 
-    const oldScore = result.analysis.score;
+    setError(null);
 
-    const res = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        mode: "fix",
-        bullet: selectedBullet.text,
-        requirement: selectedTrace.requirement
-      })
+    const oldScore = result?.analysis?.score || 0;
+
+    const fixData = await safeFetch({
+      mode: "fix",
+      bullet: selectedBullet.text,
+      requirement: selectedTrace.requirement
     });
 
-    const data = await res.json();
+    if (!fixData) return;
 
     const updatedRoles = result.roles.map((r, ri) => ({
       ...r,
@@ -60,24 +81,20 @@ function App() {
           ri === selectedBullet.roleIndex &&
           bi === selectedBullet.bulletIndex
         ) {
-          return data.rewritten;
+          return fixData.rewritten;
         }
         return b;
       })
     }));
 
-    // re-score
-    const rescore = await fetch("/.netlify/functions/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        resume: resumeInput,
-        requirements: extractRequirements(jdInput)
-      })
+    const rescored = await safeFetch({
+      resume: resumeInput,
+      requirements: extractRequirements(jdInput)
     });
 
-    const rescored = await rescore.json();
+    if (!rescored) return;
 
-    const newScore = rescored.analysis.score;
+    const newScore = rescored?.analysis?.score || oldScore;
 
     setResult({
       ...rescored,
@@ -90,11 +107,10 @@ function App() {
 
     setChangeInfo({
       before: selectedBullet.text,
-      after: data.rewritten,
+      after: fixData.rewritten,
       delta: (newScore - oldScore).toFixed(1)
     });
 
-    // 🔥 scroll into view
     setTimeout(() => {
       bulletRefs.current[key]?.scrollIntoView({
         behavior: "smooth",
@@ -106,6 +122,12 @@ function App() {
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
       <h1>NarrativeOS</h1>
+
+      {error && (
+        <div style={{ color: "red", marginBottom: 10 }}>
+          ⚠️ {error}
+        </div>
+      )}
 
       <label><strong>Paste Resume</strong></label>
       <textarea
@@ -125,22 +147,19 @@ function App() {
 
       <button onClick={handleGenerate}>Analyze</button>
 
-      {result && (
+      {result && result.analysis && (
         <div style={{ marginTop: 30 }}>
           <h2>{result.header}</h2>
           <p>{result.summary}</p>
 
           <h3>Score: {result.analysis.score} / 10</h3>
 
-          <h4>⚠️ Partial (select one)</h4>
-          <ul style={{ listStyle: "none", padding: 0 }}>
+          <h4>⚠️ Partial</h4>
+          <ul>
             {result.analysis.partial.map((req) => {
               const traceItem = result.analysis.trace.find(
                 t => t.requirement === req
               );
-
-              const isSelected =
-                selectedTrace?.requirement === req;
 
               return (
                 <li
@@ -149,63 +168,25 @@ function App() {
                     setSelectedTrace(traceItem);
                     setSelectedBullet(null);
                   }}
-                  style={{
-                    cursor: "pointer",
-                    marginBottom: 8,
-                    padding: 8,
-                    border: isSelected
-                      ? "2px solid #0077ff"
-                      : "1px solid #ddd",
-                    borderRadius: 6
-                  }}
+                  style={{ cursor: "pointer" }}
                 >
-                  {isSelected ? "🔘" : "⚪"} {req}
+                  {req}
                 </li>
               );
             })}
           </ul>
 
           {selectedTrace && (
-            <div style={{ marginTop: 20 }}>
-              <h4>Select a bullet</h4>
-
+            <div>
               {selectedTrace.evidence.map((e, i) => (
-                <p
-                  key={i}
-                  onClick={() => setSelectedBullet(e)}
-                  style={{
-                    cursor: "pointer",
-                    background:
-                      selectedBullet === e ? "#e3f2fd" : "#f9f9f9",
-                    padding: 6
-                  }}
-                >
+                <p key={i} onClick={() => setSelectedBullet(e)}>
                   • {e.text}
                 </p>
               ))}
 
-              <button
-                onClick={handleFix}
-                disabled={!selectedBullet}
-                style={{ marginTop: 10 }}
-              >
+              <button onClick={handleFix}>
                 🔧 Fix selected bullet
               </button>
-            </div>
-          )}
-
-          {/* 🔥 CHANGE PANEL */}
-          {changeInfo && (
-            <div style={{
-              marginTop: 20,
-              padding: 10,
-              border: "1px solid #ccc",
-              background: "#fff8e1"
-            }}>
-              <h4>Updated</h4>
-              <p><strong>Before:</strong> {changeInfo.before}</p>
-              <p><strong>After:</strong> {changeInfo.after}</p>
-              <p>Score change: {changeInfo.delta}</p>
             </div>
           )}
 
@@ -217,17 +198,7 @@ function App() {
                 {r.bullets.map((b, bi) => {
                   const key = `${ri}-${bi}`;
                   return (
-                    <li
-                      key={bi}
-                      ref={el => (bulletRefs.current[key] = el)}
-                      style={{
-                        background:
-                          changedBullet === key
-                            ? "#fff59d"
-                            : "transparent",
-                        transition: "0.3s"
-                      }}
-                    >
+                    <li key={bi} ref={el => (bulletRefs.current[key] = el)}>
                       {b}
                     </li>
                   );

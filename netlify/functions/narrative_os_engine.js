@@ -13,39 +13,30 @@ async function generateNarrativeOSResume({
 }) {
   const parsed = await parseResume(resumeData);
 
+  const roles = enforceRoles(parsed.roles);
+
   const cleanedRequirements = cleanRequirements(jobRequirements);
-  const jdPhrases = extractJDPhrases(cleanedRequirements);
 
-  const baseRoles = enforceRoles(parsed.roles);
+  const analysis = analyzeRequirements(parsed, cleanedRequirements);
 
-  const initialAnalysis = analyzeRequirements(parsed, cleanedRequirements);
-
-  const enhancedRoles = await rewriteBulletsWithJD({
-    roles: baseRoles,
-    analysis: initialAnalysis,
-    jdPhrases
-  });
-
-  const finalResume = { ...parsed, roles: enhancedRoles };
-
-  const finalAnalysis = analyzeRequirements(finalResume, cleanedRequirements);
-
-  const summary = buildSummary(parsed); // 🔥 no JD injection
+  const summary = buildSummary(parsed);
 
   return {
     header: parsed.header,
     summary,
     skills: parsed.skills,
-    roles: enhancedRoles,
+    roles,
     education: parsed.education,
-    analysis: finalAnalysis
+    analysis
   };
 }
 
 /**
- * PARSER
+ * 🔥 HYBRID PARSER (LLM + FALLBACK)
  */
 async function parseResume(rawText) {
+  let parsed;
+
   try {
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -70,75 +61,82 @@ ${rawText}
       }]
     });
 
-    return JSON.parse(extractJSON(res.choices[0].message.content));
+    parsed = JSON.parse(extractJSON(res.choices[0].message.content));
   } catch {
-    return {
-      header: rawText.split("\n")[0],
-      skills: [],
-      roles: [],
-      education: []
-    };
+    parsed = {};
   }
+
+  // 🔥 FALLBACKS (CRITICAL)
+  return {
+    header: parsed.header || extractHeader(rawText),
+    skills: parsed.skills?.length ? parsed.skills : extractSkills(rawText),
+    roles: parsed.roles?.length ? parsed.roles : extractRoles(rawText),
+    education: parsed.education?.length ? parsed.education : extractEducation(rawText)
+  };
 }
 
 /**
- * 🔥 REWRITE INSTEAD OF GENERATE
+ * 🔥 FALLBACK: HEADER
  */
-async function rewriteBulletsWithJD({ roles, analysis, jdPhrases }) {
-  let phraseIndex = 0;
+function extractHeader(text) {
+  return text.split("\n")[0];
+}
 
-  for (let role of roles) {
-    for (let i = 0; i < role.bullets.length; i++) {
-      if (phraseIndex >= jdPhrases.length) break;
+/**
+ * 🔥 FALLBACK: SKILLS
+ */
+function extractSkills(text) {
+  const lines = text.split("\n");
+  const skillLines = lines.filter(l =>
+    l.toLowerCase().includes("sap") ||
+    l.toLowerCase().includes("netSuite") ||
+    l.toLowerCase().includes("salesforce") ||
+    l.toLowerCase().includes("agile") ||
+    l.toLowerCase().includes("risk")
+  );
 
-      const jdPhrase = jdPhrases[phraseIndex];
+  return skillLines.slice(0, 8);
+}
 
-      const rewritten = await rewriteBullet(role.bullets[i], jdPhrase);
+/**
+ * 🔥 FALLBACK: ROLES
+ */
+function extractRoles(text) {
+  const sections = text.split("\n");
 
-      if (rewritten) {
-        role.bullets[i] = rewritten;
-      }
+  const roles = [];
+  let currentRole = null;
 
-      phraseIndex++;
+  for (let line of sections) {
+    if (line.match(/—/)) {
+      if (currentRole) roles.push(currentRole);
+
+      const [title, company] = line.split("—");
+
+      currentRole = {
+        title: title.trim(),
+        company: company?.trim() || "",
+        bullets: []
+      };
+    } else if (currentRole && line.length > 30) {
+      currentRole.bullets.push(line.trim());
     }
   }
 
-  return roles;
+  if (currentRole) roles.push(currentRole);
+
+  return roles.slice(0, 3);
 }
 
 /**
- * 🔥 SAFE REWRITE
+ * 🔥 FALLBACK: EDUCATION
  */
-async function rewriteBullet(originalBullet, jdPhrase) {
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 80,
-      messages: [{
-        role: "user",
-        content: `
-Rewrite this resume bullet.
-
-RULES:
-- Keep original meaning EXACT
-- DO NOT add new experience
-- Lightly incorporate JD phrasing
-- Max 25 words
-
-ORIGINAL:
-${originalBullet}
-
-JD LANGUAGE:
-${jdPhrase}
-`
-      }]
-    });
-
-    return res.choices[0].message.content.trim();
-  } catch {
-    return originalBullet;
-  }
+function extractEducation(text) {
+  return text
+    .split("\n")
+    .filter(l => l.toLowerCase().includes("university"))
+    .slice(0, 2)
+    .map(e => ({ degree: e }));
 }
 
 /**
@@ -147,30 +145,12 @@ ${jdPhrase}
 function cleanRequirements(reqs = []) {
   return reqs
     .map(r => r.trim())
-    .filter(r =>
-      r.length > 20 &&
-      !r.toLowerCase().includes("linkedin") &&
-      !r.toLowerCase().includes("apply") &&
-      !r.toLowerCase().includes("people")
-    )
+    .filter(r => r.length > 20)
     .slice(0, 8);
 }
 
 /**
- * JD PHRASES (cleaner)
- */
-function extractJDPhrases(reqs) {
-  return reqs.map(r =>
-    r
-      .replace(/[^a-zA-Z0-9 ]/g, "")
-      .split(" ")
-      .slice(2, 7)
-      .join(" ")
-  );
-}
-
-/**
- * SCORING (unchanged)
+ * SCORING
  */
 function analyzeRequirements(resume, requirements = []) {
   const text = normalizeText([
@@ -193,7 +173,7 @@ function analyzeRequirements(resume, requirements = []) {
   const total = requirements.length || 1;
 
   const coverage = Math.round(
-    ((matched.length + partial.length * 0.7) / total) * 100
+    ((matched.length + partial.length * 0.6) / total) * 100
   );
 
   const score = Math.round((coverage / 10) * 10) / 10;
@@ -202,11 +182,11 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * SUMMARY (clean)
+ * SUMMARY
  */
 function buildSummary(resume) {
   const roles = resume.roles?.map(r => r.title).join(", ");
-  const skills = resume.skills?.slice(0, 5).join(", ");
+  const skills = resume.skills?.slice(0, 4).join(", ");
 
   return `${roles} professional with experience in ${skills}.`;
 }

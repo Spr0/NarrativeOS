@@ -9,7 +9,7 @@ function clean(text = "") {
 }
 
 // ==============================
-// REQUIREMENTS WITH AND/OR LOGIC
+// REQUIREMENTS (AND/OR AWARE)
 // ==============================
 
 function extractRequirements(text = "") {
@@ -34,7 +34,7 @@ function extractRequirements(text = "") {
       type,
       weight:
         type === "REQUIRED" ? 1.2 :
-        type === "OPTIONAL" ? 0.7 :
+        type === "OPTIONAL" ? 0.8 :
         1.0
     };
   });
@@ -66,44 +66,46 @@ function extractBullets(text = "") {
 }
 
 // ==============================
-// SCORING
+// SCORING (BALANCED + CONTINUOUS)
 // ==============================
 
 function scoreBullet(req, bullet) {
   const r = req.toLowerCase();
   const b = bullet.toLowerCase();
 
-  let score = 0.25;
+  let score = 0.3; // base
 
   let signalCount = 0;
 
   if (b.includes("program")) {
-    score += 0.15;
+    score += 0.12;
     signalCount++;
   }
 
   if (b.includes("delivery")) {
-    score += 0.15;
+    score += 0.12;
     signalCount++;
   }
 
   if (b.includes("stakeholder")) {
-    score += 0.1;
+    score += 0.08;
     signalCount++;
   }
 
   if (b.includes("dependency")) {
-    score += 0.1;
+    score += 0.08;
     signalCount++;
   }
 
+  // keyword overlap
   const words = r.split(/\W+/).filter(w => w.length > 5);
   const matches = words.filter(w => b.includes(w)).length;
 
-  score += Math.min(matches * 0.06, 0.25);
+  score += Math.min(matches * 0.05, 0.25);
 
+  // multi-signal bonus
   if (signalCount >= 2) {
-    score += 0.1;
+    score += 0.08;
   }
 
   return Math.max(0, Math.min(score, 1));
@@ -123,6 +125,9 @@ export async function runNarrativeOS({
 
     const results = [];
 
+    let totalWeight = 0;
+    let weightedScoreSum = 0;
+
     for (const reqObj of requirements) {
       const { text: req, weight, type } = reqObj;
 
@@ -133,6 +138,11 @@ export async function runNarrativeOS({
       }));
 
       ranked.sort((a, b) => b.score - a.score);
+
+      const bestScore = ranked[0]?.score || 0;
+
+      totalWeight += weight;
+      weightedScoreSum += bestScore * weight;
 
       results.push({
         requirement: req,
@@ -145,35 +155,23 @@ export async function runNarrativeOS({
     }
 
     // ==============================
-    // WEIGHTED SCORING (NEW)
+    // AVERAGE-BASED SCORING (FIX)
     // ==============================
 
-    let totalWeight = 0;
-    let earnedWeight = 0;
+    const averageScore =
+      totalWeight > 0 ? weightedScoreSum / totalWeight : 0;
 
-    for (const r of results) {
-      const bestScore = r?.rankedBullets?.[0]?.score || 0;
-
-      totalWeight += r.weight;
-
-      if (bestScore >= 0.7) {
-        earnedWeight += r.weight;
-      } else if (bestScore >= 0.5) {
-        earnedWeight += r.weight * 0.6;
-      }
-    }
-
-    const coverage =
-      totalWeight > 0 ? earnedWeight / totalWeight : 0;
+    // slight compression (prevents easy 10s)
+    const adjusted = Math.pow(averageScore, 1.15);
 
     const finalScore = Math.min(
       10,
-      Math.round(Math.pow(coverage, 1.1) * 10)
+      Math.round(adjusted * 10)
     );
 
     return {
       score: finalScore,
-      coverage,
+      coverage: averageScore,
       requirements: safeArray(results),
     };
 

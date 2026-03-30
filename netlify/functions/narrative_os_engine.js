@@ -12,7 +12,227 @@ const CAPABILITY_RULES = [
   {
     name: "PROGRAM_DELIVERY",
     signals: ["program", "delivery", "roadmap", "execution"],
-    guidance: "Clarify ownership of delivery, scope, and measurable outcomes."
+    guidance: "Clarify ownership of // narrative_os_engine.js
+
+const GENERIC_PHRASES = [
+  "program governance",
+  "stakeholders",
+  "cross-functional",
+  "delivery excellence",
+  "strategic alignment"
+];
+
+const NOISE_PATTERNS = [
+  /@/,                     // emails
+  /\d{3}[-.\s]?\d{3}/,     // phone numbers
+  /\bWA\b|\bCA\b|\bNY\b/,  // states
+  /\|/,                    // separators
+  /linkedin/i,
+  /bellingham/i,
+  /^scott/i,
+  /responsibilities$/i,
+  /summary$/i
+];
+
+// ==============================
+// TEXT CLEANING
+// ==============================
+
+function cleanLine(text = "") {
+  return text
+    .replace(/^com\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isNoise(line = "") {
+  const l = line.toLowerCase();
+
+  if (l.length < 20) return true;
+
+  return NOISE_PATTERNS.some(p => p.test(l));
+}
+
+// ==============================
+// BULLET EXTRACTION (FIXED)
+// ==============================
+
+function extractBullets(text = "") {
+  const lines = text
+    .split("\n")
+    .map(l => cleanLine(l))
+    .filter(l => l.length > 0);
+
+  let bullets = lines.filter(l =>
+    l.startsWith("-") ||
+    l.startsWith("•") ||
+    l.startsWith("*")
+  );
+
+  bullets = bullets.map(b => b.replace(/^[-•*]\s*/, ""));
+
+  // fallback if no bullets
+  if (bullets.length === 0) {
+    bullets = text
+      .split(/[.!?]/)
+      .map(s => cleanLine(s))
+      .filter(s => s.length > 40);
+  }
+
+  // remove noise
+  bullets = bullets.filter(b => !isNoise(b));
+
+  return bullets.slice(0, 25);
+}
+
+// ==============================
+// CAPABILITIES
+// ==============================
+
+const CAPABILITY_RULES = [
+  {
+    name: "PROGRAM_DELIVERY",
+    signals: ["program", "delivery", "roadmap", "execution"],
+    guidance: "Clarify ownership of delivery and outcomes."
+  },
+  {
+    name: "DEPENDENCY_MANAGEMENT",
+    signals: ["dependency", "dependencies", "blockers"],
+    guidance: "Show how dependencies were managed."
+  },
+  {
+    name: "STAKEHOLDER_MANAGEMENT",
+    signals: ["stakeholder", "executive", "alignment"],
+    guidance: "Highlight stakeholder alignment."
+  }
+];
+
+function extractCapabilities(text = "") {
+  const lower = text.toLowerCase();
+
+  return CAPABILITY_RULES.map(rule => {
+    const matches = rule.signals.filter(s => lower.includes(s));
+    return {
+      name: rule.name,
+      score: matches.length / rule.signals.length,
+      guidance: rule.guidance
+    };
+  })
+    .filter(c => c.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
+
+// ==============================
+// SCORING
+// ==============================
+
+function keywordScore(req = "", bullet = "") {
+  const reqWords = req.toLowerCase().split(/\W+/);
+  const bulletText = bullet.toLowerCase();
+
+  let matches = 0;
+
+  for (const w of reqWords) {
+    if (w.length > 4 && bulletText.includes(w)) {
+      matches++;
+    }
+  }
+
+  return Math.min(matches / 5, 1);
+}
+
+function capabilityScore(reqCaps, bullet = "") {
+  const text = bullet.toLowerCase();
+  let score = 0;
+
+  for (const cap of reqCaps) {
+    if (cap.name === "PROGRAM_DELIVERY" && text.includes("program")) {
+      score += 0.5;
+    }
+    if (cap.name === "STAKEHOLDER_MANAGEMENT" && text.includes("stakeholder")) {
+      score += 0.3;
+    }
+    if (cap.name === "DEPENDENCY_MANAGEMENT" && text.includes("depend")) {
+      score += 0.4;
+    }
+  }
+
+  return Math.min(score, 1);
+}
+
+// ==============================
+// MAIN ENGINE
+// ==============================
+
+export async function runNarrativeOS({
+  resumeText = "",
+  jobDescription = ""
+}) {
+  try {
+    const requirements = jobDescription
+      .split("\n")
+      .map(r => cleanLine(r))
+      .filter(r => r.length > 25 && !isNoise(r));
+
+    const bullets = extractBullets(resumeText);
+
+    const results = [];
+
+    for (const req of requirements) {
+      const reqCaps = extractCapabilities(req);
+      const primaryCap = reqCaps[0];
+
+      const ranked = bullets.map((bullet, i) => {
+        const capScore = capabilityScore(reqCaps, bullet);
+        const keyScore = keywordScore(req, bullet);
+
+        const score = (0.6 * capScore) + (0.4 * keyScore);
+
+        return {
+          bulletId: i,
+          text: bullet,
+          score,
+          gaps: [],
+          estimatedImprovement: 0.1
+        };
+      });
+
+      ranked.sort((a, b) => b.score - a.score);
+
+      results.push({
+        requirement: req,
+        capability: primaryCap?.name || "GENERAL",
+        rankedBullets: ranked.slice(0, 5),
+        recommendation: ranked[0]
+          ? {
+              bestBullet: ranked[0].text,
+              rewriteGuidance: {
+                guidance: "Make this more specific and outcome-driven.",
+                exampleFocus: "Add metrics, scope, and stakeholders."
+              }
+            }
+          : null
+      });
+    }
+
+    const coverage =
+      results.filter(r => r.rankedBullets[0]?.score > 0.3).length /
+      (results.length || 1);
+
+    return {
+      score: Math.round(coverage * 10),
+      coverage,
+      requirements: results
+    };
+
+  } catch (e) {
+    return {
+      score: 0,
+      coverage: 0,
+      requirements: []
+    };
+  }
+}delivery, scope, and measurable outcomes."
   },
   {
     name: "DEPENDENCY_MANAGEMENT",

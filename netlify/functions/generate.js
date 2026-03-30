@@ -1,108 +1,184 @@
-const engine = require("./narrative_os_engine");
-const OpenAI = require("openai");
+// netlify/functions/generate.js
+
+import OpenAI from "openai";
+import { runNarrativeOS } from "./narrative_os_engine.js";
+
+// ==============================
+// INIT OPENAI
+// ==============================
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-exports.handler = async (event) => {
+// ==============================
+// SAFE RESPONSE BUILDER
+// ==============================
+
+function buildSafeResponse(overrides = {}) {
+  return {
+    score: 0,
+    coverage: 0,
+    requirements: [],
+    error: false,
+    message: "",
+    ...overrides,
+  };
+}
+
+// ==============================
+// HANDLER
+// ==============================
+
+export async function handler(event) {
+  console.log("=== NarrativeOS Generate Function Invoked ===");
+
   try {
-    const body = JSON.parse(event.body || "{}");
-
-    // 🔍 DEBUG (optional, remove later)
-    console.log("ENGINE KEYS:", Object.keys(engine));
-
-    /**
-     * 🔧 FIX MODE
-     */
-    if (body.mode === "fix") {
-      if (!body.bullet || !body.requirement) {
-        return {
-          statusCode: 400,
-          body: JSON.stringify({
-            error: true,
-            message: "Missing bullet or requirement"
-          })
-        };
-      }
-
-      const rewritten = await rewriteBullet(
-        body.bullet,
-        body.requirement
-      );
-
+    // ------------------------------
+    // METHOD CHECK
+    // ------------------------------
+    if (event.httpMethod !== "POST") {
       return {
         statusCode: 200,
-        body: JSON.stringify({
-          success: true,
-          rewritten
-        })
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Only POST requests are allowed",
+          })
+        ),
       };
     }
 
-    /**
-     * 🧠 NORMAL ANALYSIS MODE
-     */
-    if (!engine.generateNarrativeOSResume) {
-      throw new Error("Engine function not found");
+    // ------------------------------
+    // ENV CHECK
+    // ------------------------------
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("❌ Missing OPENAI_API_KEY");
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Server misconfiguration: missing API key",
+          })
+        ),
+      };
     }
 
-    const result = await engine.generateNarrativeOSResume({
-      resumeData: body.resume,
-      jobRequirements: body.requirements
-    });
+    console.log("✅ OpenAI key present");
+
+    // ------------------------------
+    // PARSE BODY
+    // ------------------------------
+    let body;
+
+    try {
+      body = JSON.parse(event.body || "{}");
+    } catch (err) {
+      console.error("❌ Failed to parse request body", err);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Invalid JSON body",
+          })
+        ),
+      };
+    }
+
+    const { resumeText, jobDescription } = body;
+
+    // ------------------------------
+    // INPUT VALIDATION
+    // ------------------------------
+    if (!resumeText || !jobDescription) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Missing resumeText or jobDescription",
+          })
+        ),
+      };
+    }
+
+    console.log("📄 Resume length:", resumeText.length);
+    console.log("📄 JD length:", jobDescription.length);
+
+    // ------------------------------
+    // RUN ENGINE
+    // ------------------------------
+    let result;
+
+    try {
+      result = await runNarrativeOS({
+        resumeText,
+        jobDescription,
+        openai,
+      });
+    } catch (engineError) {
+      console.error("❌ ENGINE FAILURE:", engineError);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Engine processing failed",
+          })
+        ),
+      };
+    }
+
+    // ------------------------------
+    // FINAL SAFETY CHECK
+    // ------------------------------
+    if (!result || !result.requirements) {
+      console.error("❌ Invalid engine output:", result);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify(
+          buildSafeResponse({
+            error: true,
+            message: "Invalid engine output",
+          })
+        ),
+      };
+    }
+
+    console.log("✅ Engine success");
+    console.log("📊 Score:", result.score);
+
+    // ------------------------------
+    // SUCCESS RESPONSE
+    // ------------------------------
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        ...buildSafeResponse(),
+        ...result,
+      }),
+    };
+
+  } catch (fatalError) {
+    // ------------------------------
+    // GLOBAL CATCH (NEVER 502)
+    // ------------------------------
+    console.error("💥 FATAL ERROR:", fatalError);
 
     return {
       statusCode: 200,
-      body: JSON.stringify(result)
+      body: JSON.stringify(
+        buildSafeResponse({
+          error: true,
+          message: "Unexpected server error",
+        })
+      ),
     };
-
-  } catch (err) {
-    console.error("❌ FUNCTION ERROR:", err);
-
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        error: true,
-        message: err.message || "Unknown server error"
-      })
-    };
-  }
-};
-
-/**
- * 🔧 SAFE BULLET REWRITE
- */
-async function rewriteBullet(original, requirement) {
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 80,
-      messages: [{
-        role: "user",
-        content: `
-Rewrite this resume bullet.
-
-RULES:
-- Keep original meaning EXACT
-- Do NOT add new tools/platforms
-- Lightly align wording to requirement
-- Max 25 words
-
-ORIGINAL:
-${original}
-
-TARGET REQUIREMENT:
-${requirement}
-`
-      }]
-    });
-
-    return res.choices[0].message.content.trim();
-
-  } catch (err) {
-    console.error("Rewrite failed:", err);
-    return original; // 🔥 fallback: never break UX
   }
 }

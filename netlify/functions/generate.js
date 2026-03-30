@@ -1,25 +1,33 @@
-import { generateNarrativeOSResume } from "./narrative_os_engine.js";
+const { generateNarrativeOSResume } = require("./narrative_os_engine");
 
-export const handler = async (event) => {
+exports.handler = async (event) => {
+  console.log("🚀 FUNCTION START");
+
   try {
     const body = JSON.parse(event.body || "{}");
 
+    console.log("📥 INPUT RECEIVED");
+
     const result = await generateNarrativeOSResume({
-      resumeData: body.resume, // RAW TEXT
+      resumeData: body.resume,
       jobRequirements: body.requirements || []
     });
+
+    console.log("✅ SUCCESS");
 
     return {
       statusCode: 200,
       body: JSON.stringify(result)
     };
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error("🔥 FUNCTION ERROR:", err);
 
     return {
-      statusCode: 500,
+      statusCode: 200, // prevent frontend crash
       body: JSON.stringify({
-        error: err.message || "Unknown error"
+        error: true,
+        message: err.message || "Unknown error",
+        fallback: true
       })
     };
   }

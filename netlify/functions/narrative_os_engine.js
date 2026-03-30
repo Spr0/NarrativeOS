@@ -11,36 +11,33 @@ async function generateNarrativeOSResume({
   resumeData,
   jobRequirements
 }) {
-  const normalized = await parseResume(resumeData);
+  const parsed = await parseResume(resumeData);
 
   const cleanedRequirements = cleanRequirements(jobRequirements);
   const jdPhrases = extractJDPhrases(cleanedRequirements);
 
-  const baseRoles = enforceRoles(normalized.roles);
+  const baseRoles = enforceRoles(parsed.roles);
 
-  const initialAnalysis = analyzeRequirements(normalized, cleanedRequirements);
+  const initialAnalysis = analyzeRequirements(parsed, cleanedRequirements);
 
-  const enhancedRoles = await injectGapBullets({
+  const enhancedRoles = await rewriteBulletsWithJD({
     roles: baseRoles,
     analysis: initialAnalysis,
     jdPhrases
   });
 
-  const finalResume = {
-    ...normalized,
-    roles: enhancedRoles
-  };
+  const finalResume = { ...parsed, roles: enhancedRoles };
 
   const finalAnalysis = analyzeRequirements(finalResume, cleanedRequirements);
 
-  const summary = buildSummary(finalResume, jdPhrases);
+  const summary = buildSummary(parsed); // 🔥 no JD injection
 
   return {
-    header: normalized.header || "Candidate",
+    header: parsed.header,
     summary,
-    skills: normalized.skills || [],
+    skills: parsed.skills,
     roles: enhancedRoles,
-    education: normalized.education || [],
+    education: parsed.education,
     analysis: finalAnalysis
   };
 }
@@ -76,11 +73,71 @@ ${rawText}
     return JSON.parse(extractJSON(res.choices[0].message.content));
   } catch {
     return {
-      header: rawText.split("\n")[0] || "Candidate",
+      header: rawText.split("\n")[0],
       skills: [],
       roles: [],
       education: []
     };
+  }
+}
+
+/**
+ * 🔥 REWRITE INSTEAD OF GENERATE
+ */
+async function rewriteBulletsWithJD({ roles, analysis, jdPhrases }) {
+  let phraseIndex = 0;
+
+  for (let role of roles) {
+    for (let i = 0; i < role.bullets.length; i++) {
+      if (phraseIndex >= jdPhrases.length) break;
+
+      const jdPhrase = jdPhrases[phraseIndex];
+
+      const rewritten = await rewriteBullet(role.bullets[i], jdPhrase);
+
+      if (rewritten) {
+        role.bullets[i] = rewritten;
+      }
+
+      phraseIndex++;
+    }
+  }
+
+  return roles;
+}
+
+/**
+ * 🔥 SAFE REWRITE
+ */
+async function rewriteBullet(originalBullet, jdPhrase) {
+  try {
+    const res = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      max_tokens: 80,
+      messages: [{
+        role: "user",
+        content: `
+Rewrite this resume bullet.
+
+RULES:
+- Keep original meaning EXACT
+- DO NOT add new experience
+- Lightly incorporate JD phrasing
+- Max 25 words
+
+ORIGINAL:
+${originalBullet}
+
+JD LANGUAGE:
+${jdPhrase}
+`
+      }]
+    });
+
+    return res.choices[0].message.content.trim();
+  } catch {
+    return originalBullet;
   }
 }
 
@@ -96,98 +153,27 @@ function cleanRequirements(reqs = []) {
       !r.toLowerCase().includes("apply") &&
       !r.toLowerCase().includes("people")
     )
-    .slice(0, 10);
+    .slice(0, 8);
 }
 
 /**
- * JD PHRASES
+ * JD PHRASES (cleaner)
  */
-function extractJDPhrases(requirements) {
-  return requirements.map(r =>
-    r.replace(/[^\w\s]/g, "").split(" ").slice(0, 6).join(" ")
+function extractJDPhrases(reqs) {
+  return reqs.map(r =>
+    r
+      .replace(/[^a-zA-Z0-9 ]/g, "")
+      .split(" ")
+      .slice(2, 7)
+      .join(" ")
   );
 }
 
 /**
- * GAP INJECTION (🔥 CORE FEATURE)
- */
-async function injectGapBullets({ roles, analysis, jdPhrases }) {
-  const gaps = [...analysis.missing, ...analysis.partial].slice(0, 6);
-
-  let roleIndex = 0;
-
-  for (let gap of gaps) {
-    const role = roles[roleIndex % roles.length];
-
-    if (role.bullets.length >= 4) {
-      roleIndex++;
-      continue;
-    }
-
-    const jdPhrase = jdPhrases[roleIndex % jdPhrases.length] || gap;
-
-    const bullet = await generateGapBullet(role, gap, jdPhrase);
-
-    if (bullet) {
-      role.bullets.push(trimBullet(bullet));
-    }
-
-    roleIndex++;
-  }
-
-  return roles.map(r => ({
-    ...r,
-    bullets: r.bullets.slice(0, 4)
-  }));
-}
-
-/**
- * 🔥 GAP BULLET GENERATOR
- */
-async function generateGapBullet(role, gap, jdPhrase) {
-  try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 120,
-      messages: [{
-        role: "user",
-        content: `
-Write ONE resume bullet.
-
-RULES:
-- No fake tools or platforms
-- Use real experience from bullets
-- Inject JD language when possible
-- Max 25 words
-- One sentence
-
-ROLE:
-${role.title} at ${role.company}
-
-EXISTING BULLETS:
-${role.bullets.join("\n")}
-
-TARGET GAP:
-${gap}
-
-JD LANGUAGE:
-${jdPhrase}
-`
-      }]
-    });
-
-    return res.choices[0].message.content.trim();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * SCORING (same capability-based)
+ * SCORING (unchanged)
  */
 function analyzeRequirements(resume, requirements = []) {
-  const resumeText = normalizeText([
+  const text = normalizeText([
     ...(resume.skills || []),
     ...(resume.roles || []).flatMap(r => r.bullets || [])
   ].join(" "));
@@ -199,8 +185,8 @@ function analyzeRequirements(resume, requirements = []) {
   for (let req of requirements) {
     const r = normalizeText(req);
 
-    if (resumeText.includes(r)) matched.push(req);
-    else if (isWeakMatch(r, resumeText)) partial.push(req);
+    if (text.includes(r)) matched.push(req);
+    else if (isWeakMatch(r, text)) partial.push(req);
     else missing.push(req);
   }
 
@@ -216,14 +202,13 @@ function analyzeRequirements(resume, requirements = []) {
 }
 
 /**
- * SUMMARY
+ * SUMMARY (clean)
  */
-function buildSummary(resume, jdPhrases = []) {
+function buildSummary(resume) {
   const roles = resume.roles?.map(r => r.title).join(", ");
-  const skills = resume.skills?.slice(0, 4).join(", ");
-  const jd = jdPhrases.slice(0, 2).join(", ");
+  const skills = resume.skills?.slice(0, 5).join(", ");
 
-  return `${roles} professional with experience in ${skills}. Aligned with ${jd}.`;
+  return `${roles} professional with experience in ${skills}.`;
 }
 
 /**
@@ -238,20 +223,7 @@ function isWeakMatch(req, text) {
   return words.some(w => text.includes(w));
 }
 
-function trimBullet(text) {
-  return text.split(" ").slice(0, 25).join(" ");
-}
-
 function enforceRoles(roles = []) {
-  if (!roles.length) {
-    return [{
-      title: "Experience",
-      company: "",
-      dates: "",
-      bullets: ["Experience not parsed"]
-    }];
-  }
-
   return roles.slice(0, 3).map(r => ({
     ...r,
     bullets: (r.bullets || []).slice(0, 4)

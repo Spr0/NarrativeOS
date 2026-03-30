@@ -1,5 +1,16 @@
 import { useState } from "react";
 
+function cleanText(text = "") {
+  return text
+    .replace(/^com\s+/i, "") // remove leading "com"
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatScore(score) {
+  return Math.round(score * 100); // 0–100 scale
+}
+
 export default function App() {
   const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -34,7 +45,6 @@ export default function App() {
         message: result?.message ?? "",
       });
     } catch (err) {
-      console.error(err);
       setData({
         score: 0,
         coverage: 0,
@@ -83,7 +93,7 @@ export default function App() {
 
       {!data.error && (
         <div style={{ marginTop: 20 }}>
-          <h2>Score: {data.score}/10</h2>
+          <h2>Match Score: {data.score}/10</h2>
           <p>Coverage: {(data.coverage * 100).toFixed(0)}%</p>
         </div>
       )}
@@ -106,7 +116,7 @@ export default function App() {
               }}
             >
               <h3>Requirement</h3>
-              <p>{req.requirement}</p>
+              <p>{cleanText(req.requirement)}</p>
 
               <p>
                 <strong>Capability:</strong>{" "}
@@ -114,17 +124,39 @@ export default function App() {
               </p>
 
               {best && (
-                <div style={{ background: "#f3f3f3", padding: 10 }}>
-                  <strong>⭐ Best Match</strong>
-                  <p>{best.text}</p>
-                  <p>Score: {best.score.toFixed(2)}</p>
+                <div
+                  style={{
+                    background: "#f3f3f3",
+                    padding: 10,
+                    marginTop: 10,
+                  }}
+                >
+                  <strong>⭐ Best Evidence</strong>
+                  <p>{cleanText(best.text)}</p>
+
+                  <p>
+                    Strength: {formatScore(best.score)}/100
+                  </p>
+
+                  {best.gaps?.length > 0 && (
+                    <p>
+                      Missing: {best.gaps.join(", ")}
+                    </p>
+                  )}
+
+                  {best.estimatedImprovement > 0 && (
+                    <p>
+                      Potential improvement: +
+                      {formatScore(best.estimatedImprovement)}
+                    </p>
+                  )}
                 </div>
               )}
 
               <div style={{ marginTop: 10 }}>
-                <strong>Top Matches</strong>
+                <strong>Other Evidence</strong>
 
-                {ranked.map((b, idx) => (
+                {ranked.slice(1).map((b, idx) => (
                   <div
                     key={idx}
                     style={{
@@ -133,30 +165,11 @@ export default function App() {
                       paddingTop: 8,
                     }}
                   >
-                    <p>{b.text}</p>
+                    <p>{cleanText(b.text)}</p>
 
                     <small>
-                      Score: {b.score.toFixed(2)} | Emb:{" "}
-                      {b.breakdown?.embedding?.toFixed(2)} | Cap:{" "}
-                      {b.breakdown?.capability?.toFixed(2)}
+                      Strength: {formatScore(b.score)}/100
                     </small>
-
-                    {b.gaps?.length > 0 && (
-                      <div>
-                        <small>
-                          Missing: {b.gaps.join(", ")}
-                        </small>
-                      </div>
-                    )}
-
-                    {b.estimatedImprovement > 0 && (
-                      <div>
-                        <small>
-                          Potential Gain: +
-                          {b.estimatedImprovement.toFixed(2)}
-                        </small>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -169,11 +182,12 @@ export default function App() {
                     background: "#eef6ff",
                   }}
                 >
-                  <strong>Rewrite Guidance</strong>
+                  <strong>How to Improve</strong>
                   <p>
                     {req.recommendation.rewriteGuidance.guidance}
                   </p>
                   <p>
+                    Focus:{" "}
                     {
                       req.recommendation.rewriteGuidance
                         .exampleFocus

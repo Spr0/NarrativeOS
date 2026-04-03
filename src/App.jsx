@@ -1534,7 +1534,8 @@ function RoleCard({ card, onClick }) {
   );
 }
 
-function PipelineStatsStrip({ cards }) {
+function PipelineStatsStrip({ cards: cardsProp }) {
+  const cards = Array.isArray(cardsProp) ? cardsProp : [];
   const stageCount = STAGES.reduce((acc, s) => { acc[s] = cards.filter(c => c.stage === s).length; return acc; }, {});
   return (
     <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", marginBottom: "14px" }}>
@@ -1552,7 +1553,8 @@ function PipelineStatsStrip({ cards }) {
   );
 }
 
-function Board({ cards, onCardClick, onAddCard, onExport }) {
+function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
+  const cards = Array.isArray(cardsProp) ? cardsProp : [];
   const grouped = STAGES.reduce((acc, s) => { acc[s] = cards.filter(c => c.stage === s); return acc; }, {});
   const hasCards = cards.length > 0;
   return (
@@ -2319,7 +2321,8 @@ function StoryEditor({ story, onSave, onCancel }) {
   );
 }
 
-function MyStoriesTab({ profile, stories, setStories }) {
+function MyStoriesTab({ profile, stories: storiesProp, setStories }) {
+  const stories = Array.isArray(storiesProp) ? storiesProp : [];
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -2623,7 +2626,9 @@ function DrawerNav({ active, onChange, onClose, user }) {
 // COACHING NUDGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CoachingNudge({ cards, stories, profile }) {
+function CoachingNudge({ cards: cardsProp, stories: storiesProp, profile }) {
+  const cards = Array.isArray(cardsProp) ? cardsProp : [];
+  const stories = Array.isArray(storiesProp) ? storiesProp : [];
   const [nudge, setNudge] = useState(null);
   const [loading, setLoading] = useState(false);
   const fetched = useRef(false);
@@ -2663,7 +2668,9 @@ function CoachingNudge({ cards, stories, profile }) {
 // DASHBOARD TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DashboardTab({ cards, stories, profile, onNavigate }) {
+function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavigate }) {
+  const cards = Array.isArray(cardsProp) ? cardsProp : [];
+  const stories = Array.isArray(storiesProp) ? storiesProp : [];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = profile.displayName || profile.name?.split(" ")[0] || "";
@@ -2791,10 +2798,10 @@ export default function NarrativeOS() {
     try { const s = storageGet("nos_profile"); return s ? { ...DEFAULT_PROFILE, ...s } : DEFAULT_PROFILE; } catch { return DEFAULT_PROFILE; }
   });
   const [cards, setCards] = useState(() => {
-    try { return storageGet("nos_cards") || []; } catch { return []; }
+    try { const v = storageGet("nos_cards"); return Array.isArray(v) ? v : []; } catch { return []; }
   });
   const [stories, setStories] = useState(() => {
-    try { return storageGet("nos_stories") || []; } catch { return []; }
+    try { const v = storageGet("nos_stories"); return Array.isArray(v) ? v : []; } catch { return []; }
   });
   const [openCard, setOpenCard] = useState(null);
   const cost = useSessionCost();

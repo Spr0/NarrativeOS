@@ -1,4 +1,4 @@
-// NarrativeOS v23 — API Proxy + Avatar + Resume Alert + Coaching Fix
+// NarrativeOS v24 — Remove Job Search, 3 quick actions on dashboard
 // Key changes from v21:
 //   - Dashboard replaces Board as landing view
 //   - Hamburger/drawer nav replaces bottom nav
@@ -7,7 +7,6 @@
 //   - AI coaching nudge on dashboard
 //   - Quick actions panel with warnings for neglected areas
 //   - Interview Prep added as top-level nav destination (routes to card)
-//   - JobSearchTab state internalized (no longer passed as props)
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
@@ -1378,7 +1377,7 @@ function GapCorrectionPanel({ gaps, corrections, onSave, onDone }) {
   );
 }
 
-function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResume, onTrackOnly, onNewJD, profile, onAddToTracker, onGoToInterviewPrep, onGoToCoverLetter }) {
+function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResume, onTrackOnly, onNewJD, profile, onGoToInterviewPrep, onGoToCoverLetter }) {
   const session = useFitSession();
   const jd = session.jd;
 
@@ -1592,119 +1591,6 @@ function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
             })}
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// JOB SEARCH TAB
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function scoreJobsAgainstProfile(jobs, profile) {
-  if (!jobs.length || !profile.resumeText) return jobs.map(j => ({ ...j, fitScore: null }));
-  const resumeSnip = getActiveResume(profile).slice(0, 800);
-  const list = jobs.map((j, i) => `${i}. ${j.title} at ${j.company}: ${(j.snippet || "").slice(0, 150)}`).join("\n");
-  const sys = `You score job fit for a senior transformation executive. Resume snippet: ${resumeSnip}`;
-  const user = `Score each job 0-100 for fit. Return JSON array of numbers only, same order.\n${list}`;
-  try {
-    const raw = await callClaude(sys, user, 300);
-    const scores = JSON.parse(raw.match(/\[.*\]/s)?.[0] || "[]");
-    return jobs.map((j, i) => ({ ...j, fitScore: scores[i] ?? null }));
-  } catch { return jobs.map(j => ({ ...j, fitScore: null })); }
-}
-
-function JobResultCard({ job, onAnalyze, onAddToTracker }) {
-  const score = job.fitScore;
-  const scoreColor = score >= 75 ? "#4ade80" : score >= 50 ? "#fbbf24" : score !== null ? "#f87171" : "#4a4860";
-  const [fetching, setFetching] = useState(false);
-  const [fetchErr, setFetchErr] = useState("");
-
-  async function handleAnalyze() {
-    setFetching(true); setFetchErr("");
-    let fullJd = job.snippet || "";
-    if (job.url) {
-      try {
-        const fetched = await callClaudeSearch(
-          job.company,
-          `Retrieve the full job description text from this URL: ${job.url}\nReturn only the raw job description text, no commentary.`
-        );
-        if (fetched && fetched.length > fullJd.length) fullJd = fetched;
-      } catch { }
-    }
-    if (!fullJd) {
-      setFetchErr("Couldn't fetch full JD — paste it manually in Fit Check.");
-      setFetching(false); return;
-    }
-    setFetching(false);
-    onAnalyze({ ...job, fullJd });
-  }
-
-  return (
-    <div style={{ background: "rgba(20,20,35,0.7)", border: "1px solid #2a2840", borderRadius: "8px", padding: "14px 16px", marginBottom: "10px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: "14px", color: "#e8e6f0" }}>{job.title}</div>
-          <div style={{ fontSize: "12px", color: "#8a85a0", marginTop: "2px" }}>{job.company}{job.location ? ` · ${job.location}` : ""}</div>
-        </div>
-        {score !== null && (
-          <div style={{ fontSize: "12px", fontWeight: 700, color: scoreColor, background: `${scoreColor}18`, border: `1px solid ${scoreColor}40`, borderRadius: "6px", padding: "3px 8px", flexShrink: 0 }}>{score}%</div>
-        )}
-      </div>
-      {job.snippet && <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "8px", lineHeight: 1.5 }}>{job.snippet.slice(0, 180)}…</div>}
-      {fetchErr && <div style={{ fontSize: "11px", color: "#c9a84c", marginBottom: "8px" }}>{fetchErr}</div>}
-      <div style={{ display: "flex", gap: "8px" }}>
-        <button onClick={handleAnalyze} disabled={fetching} style={{ ...S.btnSmall, opacity: fetching ? 0.6 : 1, display: "flex", gap: "4px", alignItems: "center" }}>
-          {fetching ? <><Spinner size={11} /> Fetching JD…</> : "Analyze Fit"}
-        </button>
-        <button onClick={() => onAddToTracker(job)} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>+ Tracker</button>
-        {job.url && <a href={job.url} target="_blank" rel="noreferrer" style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px", textDecoration: "none" }}>View ↗</a>}
-      </div>
-    </div>
-  );
-}
-
-// State internalized — no longer passed as props
-function JobSearchTab({ profile, onAnalyzeJob, onAddToTracker }) {
-  const [jobs, setJobs] = useState([]);
-  const [query, setQuery] = useState("");
-  const [location, setLocation] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [scored, setScored] = useState(false);
-  const [error, setError] = useState("");
-
-  async function search() {
-    if (!query.trim()) return;
-    setLoading(true); setError(""); setJobs([]); setScored(false);
-    try {
-      const results = await callClaudeSearch(`${query} ${location}`, `Find 8 real job postings for: ${query} in ${location}. Return JSON array with fields: title, company, location, snippet, url.`);
-      let parsed = [];
-      try { parsed = JSON.parse(results.match(/\[.*\]/s)?.[0] || "[]"); } catch {}
-      const withScores = await scoreJobsAgainstProfile(parsed, profile);
-      setJobs(withScores); setScored(true);
-    } catch (e) { setError("Search failed. Check API key or try again."); }
-    setLoading(false);
-  }
-
-  return (
-    <div style={S.tab}>
-      <div style={S.label}>Job Search</div>
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px", flexWrap: "wrap" }}>
-        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()} placeholder="Role title or keywords…" style={{ ...S.input, flex: 2, minWidth: "160px" }} />
-        <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Location" style={{ ...S.input, flex: 1, minWidth: "100px" }} />
-        <button onClick={search} disabled={loading || !query.trim()} style={{ ...S.btn, opacity: loading || !query.trim() ? 0.5 : 1 }}>
-          {loading ? <><Spinner /> Searching…</> : "Search"}
-        </button>
-      </div>
-      {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
-      {jobs.length > 0 && (
-        <>
-          <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "12px" }}>{jobs.length} results{scored && profile.resumeText ? " · scored against your profile" : ""}</div>
-          {jobs.map((job, i) => <JobResultCard key={i} job={job} onAnalyze={onAnalyzeJob} onAddToTracker={onAddToTracker} />)}
-        </>
-      )}
-      {!loading && jobs.length === 0 && !error && (
-        <div style={{ textAlign: "center", color: "#3a3860", fontSize: "13px", paddingTop: "40px" }}>Search for roles above to see AI-scored results.</div>
       )}
     </div>
   );
@@ -2585,7 +2471,6 @@ function DrawerNav({ active, onChange, onClose, user }) {
   const items = [
     { id: "dashboard", icon: "⊞", label: "Dashboard" },
     { id: "tracker",   icon: "⬡", label: "Tracker" },
-    { id: "search",    icon: "⌕", label: "Search" },
     { id: "analyze",   icon: "✦", label: "Fit Check" },
     { id: "stories",   icon: "◈", label: "Stories" },
     { id: "prep",      icon: "◎", label: "Interview Prep" },
@@ -2752,7 +2637,6 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "12px" }}>Quick Actions</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {[
-            { label: "Search for Roles",  sub: "Find and score opportunities",                                         nav: "search",  icon: "⌕", warn: false },
             { label: "Fit Check a JD",    sub: "Paste a JD and score your fit",                                        nav: "analyze", icon: "✦", warn: false },
             { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "◈", warn: stories.length === 0 },
             { label: "Update Profile",    sub: hasResume ? "Resume on file" : "No resume yet — add one",               nav: "profile", icon: "◉", warn: !hasResume },
@@ -2819,6 +2703,9 @@ export default function NarrativeOS() {
   const [stories, setStories] = useState(() => {
     try { const v = storageGet("nos_stories"); return Array.isArray(v) ? v : []; } catch { return []; }
   });
+  const [corrections, setCorrections] = useState(() => {
+    try { const v = storageGet("nos_corrections"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch { return {}; }
+  });
   const [openCard, setOpenCard] = useState(null);
   const cost = useSessionCost();
   const apiLocked = useApiLock();
@@ -2826,6 +2713,7 @@ export default function NarrativeOS() {
   useEffect(() => { storageSet("nos_profile", profile); }, [profile]);
   useEffect(() => { storageSet("nos_cards", cards); }, [cards]);
   useEffect(() => { storageSet("nos_stories", stories); }, [stories]);
+  useEffect(() => { storageSet("nos_corrections", corrections); }, [corrections]);
 
   function makeCard(overrides = {}) {
     return { id: generateId(), company: "", title: "", stage: "Considering", jd: "", jdUrl: "", tags: [], notes: "", resumeText: "", coverLetterText: "", resumeType: "", createdAt: getToday(), ...overrides };
@@ -2852,15 +2740,6 @@ export default function NarrativeOS() {
     const existing = cards.find(c => c.company === session.company && c.stage !== "Rejected");
     if (!existing) {
       const c = makeCard({ company: session.company || "", title: session.role || "", stage: "Applied", jd: session.jd, jdUrl: session.jdUrl });
-      setCards(prev => [c, ...prev]);
-    }
-    setActiveTab("tracker");
-  }
-
-  function handleAddToTracker(job) {
-    const exists = cards.find(c => c.company === job.company && c.title === job.title);
-    if (!exists) {
-      const c = makeCard({ company: job.company || "", title: job.title || "", stage: "Considering", notes: job.snippet || "", jdUrl: job.url || "" });
       setCards(prev => [c, ...prev]);
     }
     setActiveTab("tracker");
@@ -2907,23 +2786,16 @@ export default function NarrativeOS() {
             <Board cards={cards} onCardClick={c => setOpenCard(c)} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} />
           </div>
         )}
-        {activeTab === "search" && (
-          <JobSearchTab
-            profile={profile}
-            onAnalyzeJob={job => { setFitSession({ jd: job.snippet || "", jdUrl: job.url || "" }); setActiveTab("analyze"); }}
-            onAddToTracker={handleAddToTracker}
-          />
-        )}
+
         {activeTab === "analyze" && (
           <AnalyzeTab
             stories={stories}
-            corrections={{}}
-            onSaveCorrections={() => {}}
+            corrections={corrections}
+            onSaveCorrections={setCorrections}
             onTrackBuildResume={handleTrackBuildResume}
             onTrackOnly={handleTrackOnly}
             onNewJD={() => wipeFitSession()}
             profile={profile}
-            onAddToTracker={handleAddToTracker}
             onGoToInterviewPrep={handleGoToInterviewPrep}
             onGoToCoverLetter={handleGoToCoverLetter}
           />
@@ -2946,3 +2818,4 @@ export default function NarrativeOS() {
     </div>
   );
 }
+

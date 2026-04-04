@@ -709,14 +709,21 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 const APIFY_TOKEN       = import.meta.env.VITE_APIFY_TOKEN || "";
 const PROXY_URL         = "/.netlify/functions/claude";
 
-function getAuthToken() {
-  return window.netlifyIdentity?.currentUser()?.token?.access_token || "";
+async function getAuthToken() {
+  const user = window.netlifyIdentity?.currentUser();
+  if (!user) return "";
+  try {
+    // jwt() returns a fresh token, refreshing if needed
+    return await user.jwt(true);
+  } catch {
+    return user?.token?.access_token || "";
+  }
 }
 
 async function callClaude(system, user, maxTokens = 2000) {
   setApiLock(true);
   try {
-    const token = getAuthToken();
+    const token = await getAuthToken();
     const res = await fetch(PROXY_URL, {
       method: "POST",
       headers: {
@@ -736,7 +743,7 @@ async function callClaude(system, user, maxTokens = 2000) {
 async function callClaudeSearch(company, query) {
   setApiLock(true);
   try {
-    const token = getAuthToken();
+    const token = await getAuthToken();
     const system = `You are a research analyst preparing a pre-interview briefing about ${company}.
 Summarize findings in 3-5 factual sentences with specific numbers, names, and dates.
 After your summary, list 1-3 source URLs as: "Sources: url1, url2"

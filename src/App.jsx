@@ -1,12 +1,9 @@
-// NarrativeOS v25 — Brief rename, gap corrections, verified skills layer
-// Key changes from v21:
-//   - Dashboard replaces Board as landing view
-//   - Hamburger/drawer nav replaces bottom nav
-//   - Board renamed to Tracker
-//   - Pipeline stats widget on dashboard (clickable → Tracker)
-//   - AI coaching nudge on dashboard
-//   - Quick actions panel with warnings for neglected areas
-//   - Interview Prep added as top-level nav destination (routes to card)
+// NarrativeOS v25.1
+// Changes from v25:
+//   - Company name prompt before build/download when card.company is blank
+//   - Filename pattern: LastName_Company (no format suffix)
+//   - Resumes + cover letters route to "Resumes" Drive folder
+//   - Back button in RoleWorkspace closes overlay instead of triggering OAuth redirect
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
@@ -48,8 +45,6 @@ const DEFAULT_PROFILE = {
   profileTier: "senior",
   resumeVariants: [],
   activeResumeId: null,
-  // Verified skills from gap corrections across all cards
-  // [{skill, context, sources: [cardId], count, firstSeenAt}]
   verifiedSkills: [],
 };
 
@@ -61,8 +56,8 @@ const RESEARCH_STEPS = [
 ];
 
 const OPTIONAL_STEPS = [
-  { key: "news",    label: "＋ Recent News",     query: c => `${c} news announcements 2025` },
-  { key: "culture", label: "＋ Culture Signals", query: c => `${c} company culture values employee reviews Glassdoor 2025` },
+  { key: "news",    label: "+ Recent News",     query: c => `${c} news announcements 2025` },
+  { key: "culture", label: "+ Culture Signals", query: c => `${c} company culture values employee reviews Glassdoor 2025` },
 ];
 
 function tierContext(profile) {
@@ -87,11 +82,11 @@ const _HANKEL_BANNED = `BANNED outdated phrases — never use:
 "hard worker," "self-starter," "people person," "proven track record," "detail-oriented"`;
 
 const _HANKEL_UPGRADE = `FADING terms — upgrade these:
-"change management" → "transformation leadership" or "change agility"
-"stakeholder communication" → "cross-functional fluency"
-"process development" → pair with automation/efficiency language
-"cross-functional collaboration" → add specifics (team count, outcome)
-"project management" → tie to methodology (SAFe, Kanban, Agile) or scope`;
+"change management" -> "transformation leadership" or "change agility"
+"stakeholder communication" -> "cross-functional fluency"
+"process development" -> pair with automation/efficiency language
+"cross-functional collaboration" -> add specifics (team count, outcome)
+"project management" -> tie to methodology (SAFe, Kanban, Agile) or scope`;
 
 const _HANKEL_TRENDING = `TRENDING transferable skills — use naturally:
 Team Alignment, Market Adaptability, Cross-Functional Fluency, Change Agility,
@@ -360,13 +355,13 @@ CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${voiceInstruction}
 ${tc.scope}
 
-One strong opening hook — not "I am writing to apply for…"
+One strong opening hook — not "I am writing to apply for..."
 3 tight paragraphs maximum. Close with forward momentum.
 
 HIGH COMMITMENT SIGNAL — CRITICAL:
 This letter must communicate that this specific role, at this specific company, is the destination — not a stepping stone.
 Signal genuine, researched alignment — not generic enthusiasm.
-One line should clearly say (without cliché): this is exactly the kind of problem I have spent years preparing to own.
+One line should clearly say (without cliche): this is exactly the kind of problem I have spent years preparing to own.
 Make the alignment specific and earned — reference something particular about THIS company's stage, challenge, or mandate.
 Avoid vague flattery ("I've long admired your company"). Earned specificity wins.
 
@@ -549,7 +544,7 @@ Return ONLY the JSON array, nothing else.`,
     `You are a warm, encouraging career coach helping ${profile.name || "this candidate"} build a STAR interview story.
 
 STAR FORMAT:
-- Situation: "Tell me about a time when…"
+- Situation: "Tell me about a time when..."
 - Task: "What were you responsible for?"
 - Action: "Walk me through what you did."
 - Result: "What was the outcome?"
@@ -709,8 +704,6 @@ function stripPreIntelRoles(text) {
 // 4. API
 // ─────────────────────────────────────────────────────────────────────────────
 
-// API key is now server-side only (netlify/functions/claude.js)
-// VITE_ANTHROPIC_API_KEY kept temporarily for CoachingNudge availability check only
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 const APIFY_TOKEN       = import.meta.env.VITE_APIFY_TOKEN || "";
 const PROXY_URL         = "/.netlify/functions/claude";
@@ -719,7 +712,6 @@ async function getAuthToken() {
   const user = window.netlifyIdentity?.currentUser();
   if (!user) return "";
   try {
-    // jwt() returns a fresh token, refreshing if needed
     return await user.jwt(true);
   } catch {
     return user?.token?.access_token || "";
@@ -786,6 +778,7 @@ async function extractContactFromResume(resumeText) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DRIVE_FOLDER_NAME = "NarrativeOS";
+const RESUMES_FOLDER_NAME = "Resumes";
 
 function getDriveToken(userKey) {
   const legacy = localStorage.getItem("cf:google_token:drive");
@@ -804,9 +797,9 @@ function clearDriveToken(userKey) {
   localStorage.removeItem("cf:google_token:drive");
 }
 
-async function getOrCreateDriveFolder(token) {
+async function getOrCreateDriveFolder(token, folderName = DRIVE_FOLDER_NAME) {
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
+    `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (searchRes.status === 401 || searchRes.status === 400) throw new Error("OAUTH_EXPIRED");
@@ -816,14 +809,14 @@ async function getOrCreateDriveFolder(token) {
   const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" }),
+    body: JSON.stringify({ name: folderName, mimeType: "application/vnd.google-apps.folder" }),
   });
   const folder = await createRes.json();
   return folder.id;
 }
 
-async function saveToDrive(blob, filename, token) {
-  const folderId = await getOrCreateDriveFolder(token);
+async function saveToDrive(blob, filename, token, folderName = DRIVE_FOLDER_NAME) {
+  const folderId = await getOrCreateDriveFolder(token, folderName);
   const metadata = { name: filename, parents: [folderId] };
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
@@ -922,13 +915,13 @@ async function buildResumeDocxBlob(finalResumeText, company, profile) {
       children.push(new Paragraph({ children: [new TextRun({ text: t, bold: true, size: 28, color: "1a1a4a", font: "Calibri" })], alignment: AlignmentType.CENTER, spacing: { after: 60 } }));
     } else if (t.includes("|") && t.includes("@") && children.length <= 2) {
       children.push(new Paragraph({ children: [new TextRun({ text: t, size: 18, color: "444444", font: "Calibri" })], alignment: AlignmentType.CENTER, spacing: { after: 160 } }));
-    } else if (t === t.toUpperCase() && t.length > 2 && t.length < 40 && !t.includes("|") && !t.includes("@") && !t.includes("—")) {
+    } else if (t === t.toUpperCase() && t.length > 2 && t.length < 40 && !t.includes("|") && !t.includes("@") && !t.includes("\u2014")) {
       children.push(new Paragraph({ children: [new TextRun({ text: t, bold: true, size: 20, color: "1a1a4a", font: "Calibri" })], spacing: { before: 180, after: 60 } }));
     } else if (t.includes("|") && !t.includes("@") && t.split("|").length >= 2 && t.split("|").length <= 4) {
       const parts = t.split("|").map(p => p.trim());
       children.push(new Paragraph({ children: [new TextRun({ text: parts[0], bold: true, size: 19, color: "111111", font: "Calibri" }), new TextRun({ text: "  |  ", size: 19, color: "888888", font: "Calibri" }), new TextRun({ text: parts.slice(1).join("  |  "), size: 19, color: "444444", font: "Calibri" })], spacing: { before: 140, after: 40 } }));
-    } else if (t.startsWith("-") || t.startsWith("•")) {
-      children.push(new Paragraph({ children: [new TextRun({ text: t.replace(/^[-•]\s*/, ""), size: 19, color: "111111", font: "Calibri" })], bullet: { level: 0 }, spacing: { after: 40 } }));
+    } else if (t.startsWith("-") || t.startsWith("\u2022")) {
+      children.push(new Paragraph({ children: [new TextRun({ text: t.replace(/^[-\u2022]\s*/, ""), size: 19, color: "111111", font: "Calibri" })], bullet: { level: 0 }, spacing: { after: 40 } }));
     } else {
       children.push(new Paragraph({ children: [new TextRun({ text: t, size: 19, color: "111111", font: "Calibri" })], spacing: { after: 60 } }));
     }
@@ -1185,7 +1178,7 @@ function CopyBtn({ text }) {
   return (
     <button onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
       style={{ ...S.btnGhost, fontSize: "12px", padding: "5px 12px" }}>
-      {copied ? "✓ Copied" : "Copy"}
+      {copied ? "Copied" : "Copy"}
     </button>
   );
 }
@@ -1202,7 +1195,6 @@ function CompBadge({ label, active, onClick }) {
 
 function generateId() { return `item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`; }
 
-// Merge a gap correction into profile.verifiedSkills
 function mergeVerifiedSkill(verifiedSkills, skill, context, cardId) {
   const skills = Array.isArray(verifiedSkills) ? verifiedSkills : [];
   const normalised = skill.toLowerCase().trim();
@@ -1216,7 +1208,6 @@ function mergeVerifiedSkill(verifiedSkills, skill, context, cardId) {
   return [...skills, { skill, context, count: 1, sources: [cardId], firstSeenAt: getToday() }];
 }
 
-// Build verified skills context string for AI prompts
 function verifiedSkillsContext(verifiedSkills) {
   const skills = Array.isArray(verifiedSkills) ? verifiedSkills : [];
   if (!skills.length) return "";
@@ -1233,7 +1224,7 @@ function StagePill({ stage, onClick, small }) {
   );
 }
 
-function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail }) {
+function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail, folderName = DRIVE_FOLDER_NAME }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState(null);
@@ -1244,7 +1235,7 @@ function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail }) {
     try {
       const token = getDriveToken(userEmail);
       if (!token) { setErr("Connect Google Drive in Profile first"); setSaving(false); return; }
-      const result = await saveToDrive(blob, filename, token);
+      const result = await saveToDrive(blob, filename, token, folderName);
       if (result.webViewLink) { setSaved(true); onSaved?.(result); }
       else setErr("Upload failed");
     } catch (e) {
@@ -1256,7 +1247,7 @@ function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail }) {
     finally { setSaving(false); }
   };
 
-  if (saved) return <span style={{ fontSize: "12px", color: "#4ade80", fontFamily: "'DM Sans', system-ui, sans-serif" }}>✓ Saved to Drive</span>;
+  if (saved) return <span style={{ fontSize: "12px", color: "#4ade80", fontFamily: "'DM Sans', system-ui, sans-serif" }}>Saved to Drive</span>;
   if (expired) return (
     <div style={{ fontSize: "11px", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "6px", padding: "6px 10px" }}>
       Drive token expired — reconnect in Profile, then retry.
@@ -1265,7 +1256,7 @@ function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail }) {
   return (
     <div>
       <button onClick={handle} disabled={disabled || saving} style={{ ...S.btnGhost, fontSize: "12px", padding: "6px 14px", display: "flex", alignItems: "center", gap: "6px", opacity: disabled || saving ? 0.5 : 1 }}>
-        {saving ? <><Spinner size={12} />Saving…</> : "📁 Save to Drive"}
+        {saving ? <><Spinner size={12} />Saving...</> : "\uD83D\uDCC1 Save to Drive"}
       </button>
       {err && <div style={{ fontSize: "11px", color: "#f87171", marginTop: "4px" }}>{err}</div>}
     </div>
@@ -1311,7 +1302,7 @@ function LoginGate() {
             Continue with Google
           </button>
           <button onClick={() => window.netlifyIdentity?.open("login")} style={{ width: "100%", background: "transparent", color: "#a8a0c8", border: "1px solid #2e3050", borderRadius: "8px", padding: "13px 20px", fontSize: "15px", fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: "500", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-            ✉ Continue with email
+            Continue with email
           </button>
         </div>
       </div>
@@ -1325,14 +1316,14 @@ function LoginGate() {
 
 function AnalysisModal({ score, rationale, gaps, onTrackBuildResume, onInterviewPrep, onCoverLetter, onTrackOnly, onCorrect, onNewJD, onDismiss }) {
   const verdict =
-    score >= 8 ? { label: "Excellent Match 🎯", color: "#4ade80", rec: "Strong alignment. Your background fits the core mandate." } :
-    score >= 6 ? { label: "Strong Contender ✅", color: "#fbbf24", rec: "Solid fit with room to sharpen your materials." } :
-    score >= 4 ? { label: "Possible Fit 🤔",    color: "#fb923c", rec: "Transferable strengths. Review gaps before applying." } :
-                 { label: "Tough Road Ahead 💪", color: "#f87171", rec: "Significant gaps. Correct any AI errors below." };
+    score >= 8 ? { label: "Excellent Match", color: "#4ade80", rec: "Strong alignment. Your background fits the core mandate." } :
+    score >= 6 ? { label: "Strong Contender", color: "#fbbf24", rec: "Solid fit with room to sharpen your materials." } :
+    score >= 4 ? { label: "Possible Fit",    color: "#fb923c", rec: "Transferable strengths. Review gaps before applying." } :
+                 { label: "Tough Road Ahead", color: "#f87171", rec: "Significant gaps. Correct any AI errors below." };
   return (
     <div onClick={onDismiss} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
       <div onClick={e => e.stopPropagation()} style={{ background: "#181a2e", border: "1px solid rgba(100,100,200,0.25)", borderRadius: "14px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", padding: "32px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)", position: "relative" }}>
-        <button onClick={onDismiss} style={{ position: "absolute", top: "14px", right: "14px", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", color: "#a0a0c0", fontSize: "15px" }}>✕</button>
+        <button onClick={onDismiss} style={{ position: "absolute", top: "14px", right: "14px", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", color: "#a0a0c0", fontSize: "15px" }}>&#10005;</button>
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
           <div style={{ fontSize: "76px", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-2px" }}>{score}<span style={{ fontSize: "28px", color: "#6060a0", fontWeight: 400 }}>/10</span></div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: verdict.color, marginTop: "8px" }}>{verdict.label}</div>
@@ -1352,7 +1343,7 @@ function AnalysisModal({ score, rationale, gaps, onTrackBuildResume, onInterview
         )}
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <button onClick={onTrackBuildResume} style={{ background: "#4f6ef7", color: "#fff", border: "none", borderRadius: "8px", padding: "14px 18px", fontSize: "14px", fontWeight: 700, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Track + Build Resume</span><span style={{ fontSize: "12px", opacity: 0.75 }}>Saves to card →</span>
+            <span>Track + Build Resume</span><span style={{ fontSize: "12px", opacity: 0.75 }}>Saves to card</span>
           </button>
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={onInterviewPrep} style={{ flex: 1, background: "rgba(168,85,247,0.12)", color: "#c084fc", border: "1px solid rgba(168,85,247,0.3)", borderRadius: "8px", padding: "11px 14px", fontSize: "13px", cursor: "pointer" }}>Interview Prep</button>
@@ -1385,13 +1376,13 @@ function GapCorrectionPanel({ gaps, corrections, onSave, onDone }) {
       {local.map((gap, i) => (
         <div key={i} style={{ border: `1px solid ${gap.flagged ? "rgba(201,168,76,0.4)" : "#2e3050"}`, borderRadius: "6px", padding: "14px 16px", marginBottom: "10px" }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-            <button onClick={() => toggle(i)} style={{ background: gap.flagged ? "#c9a84c" : "transparent", border: `1px solid ${gap.flagged ? "#c9a84c" : "#6860a0"}`, borderRadius: "3px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0, marginTop: "2px", fontSize: "11px", color: "#0f1117", display: "flex", alignItems: "center", justifyContent: "center" }}>{gap.flagged ? "✓" : ""}</button>
+            <button onClick={() => toggle(i)} style={{ background: gap.flagged ? "#c9a84c" : "transparent", border: `1px solid ${gap.flagged ? "#c9a84c" : "#6860a0"}`, borderRadius: "3px", width: "18px", height: "18px", cursor: "pointer", flexShrink: 0, marginTop: "2px", fontSize: "11px", color: "#0f1117", display: "flex", alignItems: "center", justifyContent: "center" }}>{gap.flagged ? "\u2713" : ""}</button>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: "13px", fontWeight: "600", color: "#c0b0d8", fontFamily: "'DM Sans', system-ui, sans-serif", marginBottom: "3px" }}>{gap.title}</div>
               <div style={{ fontSize: "12px", color: "#4a4060", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: "1.5" }}>{gap.assessment}</div>
               {gap.flagged && (
                 <div style={{ marginTop: "10px" }}>
-                  <textarea value={gap.userCorrection} onChange={e => update(i, e.target.value)} placeholder="Explain why this is not actually a gap…" rows={3} style={{ ...S.textarea, border: "1px solid #c9a84c" }} />
+                  <textarea value={gap.userCorrection} onChange={e => update(i, e.target.value)} placeholder="Explain why this is not actually a gap..." rows={3} style={{ ...S.textarea, border: "1px solid #c9a84c" }} />
                 </div>
               )}
             </div>
@@ -1433,10 +1424,10 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
 
   const formatFull = (p) => [
     `FIT SCORE: ${p.score}/10\n${p.rationale}\n`,
-    `KEY REQUIREMENTS:\n${p.keyRequirements?.map(r => `• ${r}`).join("\n") || ""}\n`,
-    `STRONGEST ANGLES:\n${p.strongestAngles?.map(a => `• ${a.angle}\n  → ${a.why}`).join("\n") || ""}\n`,
-    `TOP STORIES:\n${p.topStories?.map(s => `• "${s.story}"\n  → ${s.useFor}`).join("\n") || ""}\n`,
-    p.gaps?.length ? `GAPS:\n${p.gaps.map(g => `• ${g.title}\n  ${g.assessment}\n  Framing: ${g.framing}`).join("\n\n")}\n` : "GAPS: None identified.\n",
+    `KEY REQUIREMENTS:\n${p.keyRequirements?.map(r => `- ${r}`).join("\n") || ""}\n`,
+    `STRONGEST ANGLES:\n${p.strongestAngles?.map(a => `- ${a.angle}\n  -> ${a.why}`).join("\n") || ""}\n`,
+    `TOP STORIES:\n${p.topStories?.map(s => `- "${s.story}"\n  -> ${s.useFor}`).join("\n") || ""}\n`,
+    p.gaps?.length ? `GAPS:\n${p.gaps.map(g => `- ${g.title}\n  ${g.assessment}\n  Framing: ${g.framing}`).join("\n\n")}\n` : "GAPS: None identified.\n",
     `KEYWORDS: ${p.keywords?.join(", ") || ""}`,
   ].join("\n");
 
@@ -1490,14 +1481,14 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
             <span style={{ fontSize: "24px", fontWeight: 800, color: parsedScore >= 8 ? "#4ade80" : parsedScore >= 6 ? "#fbbf24" : "#f87171" }}>{parsedScore}/10</span>
             <span style={{ fontSize: "13px", color: "#c8c4e8" }}>{parsedRationale}</span>
           </div>
-          <span style={{ fontSize: "11px", color: "#6a6880" }}>View →</span>
+          <span style={{ fontSize: "11px", color: "#6a6880" }}>View</span>
         </div>
       )}
 
       {reScoring && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div style={{ background: "#181a2e", borderRadius: "10px", padding: "32px 40px", textAlign: "center" }}>
-            <Spinner size={24} /><div style={{ fontSize: "15px", fontWeight: 600, color: "#e8e4f8", marginTop: "12px" }}>Re-scoring…</div>
+            <Spinner size={24} /><div style={{ fontSize: "15px", fontWeight: 600, color: "#e8e4f8", marginTop: "12px" }}>Re-scoring...</div>
           </div>
         </div>
       )}
@@ -1505,21 +1496,21 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
       <div style={{ marginBottom: "16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
           <label style={S.label}>Job Description</label>
-          {session.jdUrl && <a href={session.jdUrl} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#c9a84c", textDecoration: "none" }}>🔗 View Post ↗</a>}
+          {session.jdUrl && <a href={session.jdUrl} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#c9a84c", textDecoration: "none" }}>View Post</a>}
         </div>
-        <textarea value={jd} onChange={e => handleJdChange(e.target.value)} rows={8} placeholder="Paste the full job description here…" style={S.textarea} />
+        <textarea value={jd} onChange={e => handleJdChange(e.target.value)} rows={8} placeholder="Paste the full job description here..." style={S.textarea} />
       </div>
 
       {Object.keys(corrections).length > 0 && (
         <div style={{ background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "10px 14px", marginBottom: "12px", fontSize: "12px", color: "#8a7040", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>✓ {Object.keys(corrections).length} gap correction{Object.keys(corrections).length > 1 ? "s" : ""} active</span>
+          <span>{Object.keys(corrections).length} gap correction{Object.keys(corrections).length > 1 ? "s" : ""} active</span>
           <button onClick={() => setShowCorrections(true)} style={{ background: "none", border: "none", color: "#c9a84c", cursor: "pointer", fontSize: "12px" }}>View / edit</button>
         </div>
       )}
 
       <button onClick={run} disabled={!jd.trim() || loading || reScoring || apiLocked}
         style={{ ...S.btn, opacity: !jd.trim() || loading || reScoring || apiLocked ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", width: "100%" }}>
-        {loading ? <><Spinner /> Analyzing…</> : "Run Fit Check"}
+        {loading ? <><Spinner /> Analyzing...</> : "Run Fit Check"}
       </button>
 
       {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
@@ -1554,9 +1545,9 @@ function RoleCard({ card, onClick }) {
       </div>
       <div style={{ fontSize: "12px", color: "#8a85a0", marginBottom: "8px" }}>{card.title || "Title TBD"}</div>
       <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-        {card.jdUrl && <a href={card.jdUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "10px", color: "#c9a84c", textDecoration: "none" }}>🔗 Post</a>}
-        {card.resumeText && <span style={{ fontSize: "10px", color: "#4ade80", background: "rgba(74,222,128,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Resume ✓</span>}
-        {card.coverLetterText && <span style={{ fontSize: "10px", color: "#2dd4bf", background: "rgba(20,184,166,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Cover ✓</span>}
+        {card.jdUrl && <a href={card.jdUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "10px", color: "#c9a84c", textDecoration: "none" }}>Post</a>}
+        {card.resumeText && <span style={{ fontSize: "10px", color: "#4ade80", background: "rgba(74,222,128,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Resume</span>}
+        {card.coverLetterText && <span style={{ fontSize: "10px", color: "#2dd4bf", background: "rgba(20,184,166,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Cover</span>}
       </div>
     </div>
   );
@@ -1591,13 +1582,13 @@ function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
         <div style={{ fontSize: "11px", color: "#3a3860" }}>{cards.length} role{cards.length !== 1 ? "s" : ""} tracked</div>
         <div style={{ display: "flex", gap: "8px" }}>
-          {hasCards && <button onClick={onExport} style={{ ...S.btnGhost, fontSize: "11px", padding: "5px 12px" }}>⬇ Export CSV</button>}
+          {hasCards && <button onClick={onExport} style={{ ...S.btnGhost, fontSize: "11px", padding: "5px 12px" }}>Export CSV</button>}
           <button onClick={onAddCard} style={{ ...S.btn, fontSize: "12px", padding: "6px 14px" }}>+ Add Role</button>
         </div>
       </div>
       {!hasCards && (
         <div style={{ textAlign: "center", padding: "60px 20px", color: "#3a3860" }}>
-          <div style={{ fontSize: "32px", marginBottom: "12px" }}>⬡</div>
+          <div style={{ fontSize: "32px", marginBottom: "12px" }}>&#x2B21;</div>
           <div style={{ fontSize: "15px", fontWeight: 600, color: "#4a4880", marginBottom: "8px" }}>No roles tracked yet</div>
           <div style={{ fontSize: "13px", marginBottom: "20px" }}>Paste a JD in Fit Check to analyze a role, or add one manually.</div>
           <button onClick={onAddCard} style={S.btn}>+ Add Role</button>
@@ -1626,6 +1617,17 @@ function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RESUME FILENAME HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+function resumeFilename(profile, company) {
+  const parts = (profile.name || "").trim().split(/\s+/).filter(Boolean);
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0] || "Resume";
+  const co = (company || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return co ? `${lastName}_${co}` : `${lastName}_Draft`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // RESUME TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1641,25 +1643,30 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
   const [saved, setSaved] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [refining, setRefining] = useState(false);
+  const [companyOverride, setCompanyOverride] = useState("");
+  const [showCompanyInput, setShowCompanyInput] = useState(false);
 
   const baseResume = getActiveResume(profile);
   const company = card?.company || "";
+  const effectiveCompany = companyOverride || company;
   const role = card?.title || "";
   const driveToken = getDriveToken(profile.email);
 
   async function run() {
     if (!baseResume) { setError("Upload a resume in Profile first."); return; }
+    if (!effectiveCompany) { setShowCompanyInput(true); return; }
+    setShowCompanyInput(false);
     setLoading(true); setError(""); setStrategy(""); setFinalResume(""); setBlob(null); setPdfBlob(null); setFeedback("");
     try {
-      setPhase("Building strategy…");
+      setPhase("Building strategy...");
       const strat = await callClaude(PROMPTS.resumeStrategy(profile, resumeType), `JD:\n${jd || "(none)"}\n\nBase resume:\n${baseResume}`, 1200);
       setStrategy(strat);
-      setPhase("Rendering resume…");
+      setPhase("Rendering resume...");
       const final = await buildFinalResumeText(baseResume, strat, jd, resumeType);
       setFinalResume(final);
       if (onSaveToCard) onSaveToCard(final, resumeType);
-      setPhase("Building DOCX…");
-      const b = await buildResumeDocxBlob(final, company, profile);
+      setPhase("Building DOCX...");
+      const b = await buildResumeDocxBlob(final, effectiveCompany, profile);
       setBlob(b);
       const pb = await buildPdfBlob(final);
       setPdfBlob(pb);
@@ -1679,7 +1686,7 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
       setFinalResume(refined);
       if (onSaveToCard) onSaveToCard(refined, resumeType);
       setFeedback("");
-      const b = await buildResumeDocxBlob(refined, company, profile);
+      const b = await buildResumeDocxBlob(refined, effectiveCompany, profile);
       setBlob(b);
       const pb = await buildPdfBlob(refined);
       setPdfBlob(pb);
@@ -1705,7 +1712,23 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
       <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "20px", lineHeight: 1.5, padding: "10px 14px", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "6px" }}>
         {RESUME_TYPES.find(r => r.id === resumeType)?.desc}
       </div>
-      {company && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "12px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {company}</span></div>}
+      {effectiveCompany && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "12px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {effectiveCompany}</span></div>}
+      {showCompanyInput && (
+        <div style={{ background: "rgba(201,168,76,0.07)", border: "1px solid rgba(201,168,76,0.35)", borderRadius: "7px", padding: "12px 14px", marginBottom: "14px" }}>
+          <div style={{ fontSize: "11px", color: "#c9a84c", marginBottom: "6px", fontWeight: 600 }}>Enter company name for the file</div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              value={companyOverride}
+              onChange={e => setCompanyOverride(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && companyOverride.trim() && run()}
+              placeholder="e.g. Salesforce"
+              autoFocus
+              style={{ ...S.input, flex: 1, fontSize: "13px", borderColor: "#c9a84c" }}
+            />
+            <button onClick={run} disabled={!companyOverride.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: companyOverride.trim() ? 1 : 0.5 }}>Build</button>
+          </div>
+        </div>
+      )}
       <button onClick={run} disabled={loading || !baseResume} style={{ ...S.btn, marginBottom: "20px", opacity: loading || !baseResume ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px" }}>
         {loading ? <><Spinner /> {phase}</> : `Build ${RESUME_TYPES.find(r => r.id === resumeType)?.label} Resume`}
       </button>
@@ -1725,21 +1748,21 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
             <div style={S.label}>Final Resume</div>
             <div style={{ display: "flex", gap: "8px" }}>
               <CopyBtn text={finalResume} />
-              {blob && <SaveToDriveBtn blob={blob} filename={`Resume_${company || "Draft"}_${resumeType}.docx`} onSaved={() => setSaved(true)} disabled={!driveToken} />}
+              {blob && <SaveToDriveBtn blob={blob} filename={`${resumeFilename(profile, effectiveCompany)}.docx`} onSaved={() => setSaved(true)} disabled={!driveToken} folderName={RESUMES_FOLDER_NAME} userEmail={profile.email} />}
               {blob && (
-                <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `Resume_${company || "Draft"}_${resumeType}.docx`; a.click(); }} style={S.btnGhost}>↓ DOCX</button>
+                <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.docx`; a.click(); }} style={S.btnGhost}>DOCX</button>
               )}
               {pdfBlob && (
-                <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `Resume_${company || "Draft"}_${resumeType}.pdf`; a.click(); }} style={S.btnGhost}>↓ PDF</button>
+                <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.pdf`; a.click(); }} style={S.btnGhost}>PDF</button>
               )}
             </div>
           </div>
           <div style={S.resultBox}>{finalResume}</div>
-          {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>✓ Saved to Google Drive</div>}
+          {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>Saved to Google Drive</div>}
           <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
             <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Refine</div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Make the opener more direct, add the $28M EBITDA number…" style={{ ...S.input, flex: 1, fontSize: "12px" }} />
+              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Make the opener more direct, add the $28M EBITDA number..." style={{ ...S.input, flex: 1, fontSize: "12px" }} />
               <button onClick={refine} disabled={refining || !feedback.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: refining || !feedback.trim() ? 0.5 : 1 }}>
                 {refining ? <Spinner size={12} /> : "Apply"}
               </button>
@@ -1764,22 +1787,27 @@ function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
   const [addedToCard, setAddedToCard] = useState(!!card?.coverLetterText);
   const [feedback, setFeedback] = useState("");
   const [refining, setRefining] = useState(false);
+  const [companyOverride, setCompanyOverride] = useState("");
+  const [showCompanyInput, setShowCompanyInput] = useState(false);
   const driveToken = getDriveToken(profile.email);
   const company = card?.company || "";
+  const effectiveCompany = companyOverride || company;
   const role = card?.title || "";
 
   async function run() {
     const base = getActiveResume(profile);
     if (!base) { setError("Upload a resume in Profile first."); return; }
+    if (!effectiveCompany) { setShowCompanyInput(true); return; }
+    setShowCompanyInput(false);
     setLoading(true); setError(""); setLetter(""); setBlob(null); setPdfBlob(null); setFeedback(""); setAddedToCard(false);
     try {
       const result = await callClaude(
-        PROMPTS.coverLetter(profile, company, role, jd || ""),
+        PROMPTS.coverLetter(profile, effectiveCompany, role, jd || ""),
         `Base resume:\n${base}\n\nJD:\n${jd || "(none)"}`,
         1000
       );
       setLetter(result);
-      const b = await buildCoverLetterDocxBlob(result, company, role, profile);
+      const b = await buildCoverLetterDocxBlob(result, effectiveCompany, role, profile);
       setBlob(b);
       const pb = await buildPdfBlob(result);
       setPdfBlob(pb);
@@ -1799,7 +1827,7 @@ function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
       setLetter(refined);
       setFeedback("");
       if (addedToCard && onSaveToCard) onSaveToCard(refined);
-      const b = await buildCoverLetterDocxBlob(refined, company, role, profile);
+      const b = await buildCoverLetterDocxBlob(refined, effectiveCompany, role, profile);
       setBlob(b);
       const pb = await buildPdfBlob(refined);
       setPdfBlob(pb);
@@ -1814,12 +1842,28 @@ function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
   return (
     <div style={S.tab}>
       <div style={S.label}>Cover Letter</div>
-      {company && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "10px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {company}</span></div>}
+      {effectiveCompany && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "10px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {effectiveCompany}</span></div>}
+      {showCompanyInput && (
+        <div style={{ background: "rgba(201,168,76,0.07)", border: "1px solid rgba(201,168,76,0.35)", borderRadius: "7px", padding: "12px 14px", marginBottom: "14px" }}>
+          <div style={{ fontSize: "11px", color: "#c9a84c", marginBottom: "6px", fontWeight: 600 }}>Enter company name for the file</div>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              value={companyOverride}
+              onChange={e => setCompanyOverride(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && companyOverride.trim() && run()}
+              placeholder="e.g. Salesforce"
+              autoFocus
+              style={{ ...S.input, flex: 1, fontSize: "13px", borderColor: "#c9a84c" }}
+            />
+            <button onClick={run} disabled={!companyOverride.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: companyOverride.trim() ? 1 : 0.5 }}>Go</button>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "14px", lineHeight: 1.5 }}>
         High commitment signal — frames this role as the destination, not a stepping stone.
       </div>
       <button onClick={run} disabled={loading} style={{ ...S.btn, marginBottom: "16px", opacity: loading ? 0.5 : 1, display: "flex", gap: "8px", alignItems: "center" }}>
-        {loading ? <><Spinner /> Writing…</> : letter ? "Regenerate" : "Generate Cover Letter"}
+        {loading ? <><Spinner /> Writing...</> : letter ? "Regenerate" : "Generate Cover Letter"}
       </button>
       {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
       {letter && (
@@ -1830,19 +1874,19 @@ function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
               <CopyBtn text={letter} />
               {onSaveToCard && (
                 <button onClick={addToCard} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px", color: addedToCard ? "#4ade80" : "#8880b8", borderColor: addedToCard ? "#4ade80" : undefined }}>
-                  {addedToCard ? "✓ On Card" : "+ Add to Card"}
+                  {addedToCard ? "On Card" : "+ Add to Card"}
                 </button>
               )}
-              {blob && <SaveToDriveBtn blob={blob} filename={`CoverLetter_${company || "Draft"}.docx`} onSaved={() => {}} disabled={!driveToken} />}
-              {blob && <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `CoverLetter_${company || "Draft"}.docx`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>↓ DOCX</button>}
-              {pdfBlob && <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `CoverLetter_${company || "Draft"}.pdf`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>↓ PDF</button>}
+              {blob && <SaveToDriveBtn blob={blob} filename={`${resumeFilename(profile, effectiveCompany)}_CoverLetter.docx`} onSaved={() => {}} disabled={!driveToken} folderName={RESUMES_FOLDER_NAME} userEmail={profile.email} />}
+              {blob && <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}_CoverLetter.docx`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>DOCX</button>}
+              {pdfBlob && <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}_CoverLetter.pdf`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 10px" }}>PDF</button>}
             </div>
           </div>
           <div style={S.resultBox}>{letter}</div>
           <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
             <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Refine</div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Strengthen the second paragraph, reference their Series B…" style={{ ...S.input, flex: 1, fontSize: "12px" }} />
+              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Strengthen the second paragraph, reference their Series B..." style={{ ...S.input, flex: 1, fontSize: "12px" }} />
               <button onClick={refine} disabled={refining || !feedback.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: refining || !feedback.trim() ? 0.5 : 1 }}>
                 {refining ? <Spinner size={12} /> : "Apply"}
               </button>
@@ -1903,7 +1947,7 @@ function BriefView({ data }) {
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <div style={{ background: "#1a237e", borderRadius: "6px", padding: "10px 14px", marginBottom: "8px" }}>
         <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>
-          {[d.header?.name, co, d.header?.role, d.header?.round].filter(Boolean).join("  ·  ")}
+          {[d.header?.name, co, d.header?.role, d.header?.round].filter(Boolean).join("  \u00b7  ")}
         </div>
         {d.header?.logistics && <div style={{ fontSize: "11px", color: "#c5cae9", marginTop: "3px" }}>{d.header.logistics}</div>}
       </div>
@@ -1915,8 +1959,8 @@ function BriefView({ data }) {
         </Cell>,
         <Cell>
           <Section title="Fit at a Glance">
-            {(d.fitAtGlance?.strengths || []).map((s, i) => <Bullet key={i} text={"✅  " + s} color="#4ade80" />)}
-            {(d.fitAtGlance?.gaps || []).map((g, i) => <Bullet key={i} text={"⚠️  " + g} color="#fbbf24" />)}
+            {(d.fitAtGlance?.strengths || []).map((s, i) => <Bullet key={i} text={"\u2705  " + s} color="#4ade80" />)}
+            {(d.fitAtGlance?.gaps || []).map((g, i) => <Bullet key={i} text={"\u26a0\ufe0f  " + g} color="#fbbf24" />)}
           </Section>
         </Cell>
       )}
@@ -1924,7 +1968,7 @@ function BriefView({ data }) {
         <Cell>
           <Section title={d.objection.concern} color="#f87171">
             <Phrase text="Answer like someone who has already decided — not debating." color="#888" />
-            {(d.objection.doNotSay || []).map((s, i) => <Bullet key={i} text={"❌  " + s} color="#f87171" />)}
+            {(d.objection.doNotSay || []).map((s, i) => <Bullet key={i} text={"\u274c  " + s} color="#f87171" />)}
           </Section>
         </Cell>,
         <Cell>
@@ -1956,7 +2000,7 @@ function BriefView({ data }) {
       )}
       <div style={{ background: "#1a237e", borderRadius: "4px", padding: "6px 14px", marginBottom: "8px" }}>
         <span style={{ fontSize: "11px", fontWeight: 700, color: "#c5cae9", letterSpacing: "0.1em" }}>
-          PAGE 2  ·  {(d.header?.name || "").toUpperCase()}  ·  {co.toUpperCase()} SCREEN
+          PAGE 2  \u00b7  {(d.header?.name || "").toUpperCase()}  \u00b7  {co.toUpperCase()} SCREEN
         </span>
       </div>
       {grid2(
@@ -1966,22 +2010,22 @@ function BriefView({ data }) {
           </Section>
           <div style={{ marginTop: "8px" }}>
             <Section title="Watch These" color="#f87171">
-              {(d.watchThese || []).map((w, i) => <Bullet key={i} text={(w.toLowerCase().startsWith("do not") ? "❌  " : "") + w} color="#f87171" />)}
+              {(d.watchThese || []).map((w, i) => <Bullet key={i} text={(w.toLowerCase().startsWith("do not") ? "\u274c  " : "") + w} color="#f87171" />)}
             </Section>
           </div>
         </Cell>,
         <Cell>
           <Section title="30 / 60 / 90" color="#4ade80">
             {d.thirtysixtynety?.thirty && <>
-              <Phrase text={"30 — " + (d.thirtysixtynety.thirty[0] || "")} color="#4ade80" />
+              <Phrase text={"30 \u2014 " + (d.thirtysixtynety.thirty[0] || "")} color="#4ade80" />
               {(d.thirtysixtynety.thirty.slice(1) || []).map((b, i) => <Bullet key={i} text={b} />)}
             </>}
             {d.thirtysixtynety?.sixty && <>
-              <Phrase text={"60 — " + (d.thirtysixtynety.sixty[0] || "")} color="#34d399" />
+              <Phrase text={"60 \u2014 " + (d.thirtysixtynety.sixty[0] || "")} color="#34d399" />
               {(d.thirtysixtynety.sixty.slice(1) || []).map((b, i) => <Bullet key={i} text={b} />)}
             </>}
             {d.thirtysixtynety?.ninety && <>
-              <Phrase text={"90 — " + (d.thirtysixtynety.ninety[0] || "")} color="#2dd4bf" />
+              <Phrase text={"90 \u2014 " + (d.thirtysixtynety.ninety[0] || "")} color="#2dd4bf" />
               {(d.thirtysixtynety.ninety.slice(1) || []).map((b, i) => <Bullet key={i} text={b} />)}
             </>}
           </Section>
@@ -2037,11 +2081,11 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
     lines.push("\nCORE STORY");
     (d.coreStory || []).forEach(s => lines.push("  " + s));
     lines.push("\nFIT AT A GLANCE");
-    (d.fitAtGlance?.strengths || []).forEach(s => lines.push("  ✅  " + s));
-    (d.fitAtGlance?.gaps || []).forEach(g => lines.push("  ⚠️  " + g));
+    (d.fitAtGlance?.strengths || []).forEach(s => lines.push("  \u2705  " + s));
+    (d.fitAtGlance?.gaps || []).forEach(g => lines.push("  \u26a0\ufe0f  " + g));
     if (d.objection?.concern) {
       lines.push("\n" + d.objection.concern);
-      (d.objection.doNotSay || []).forEach(s => lines.push("  ❌  " + s));
+      (d.objection.doNotSay || []).forEach(s => lines.push("  \u274c  " + s));
       lines.push("  SAY: " + (d.objection.sayThis || ""));
     }
     lines.push("\nCOMPETENCY GRID");
@@ -2055,7 +2099,7 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
     lines.push("\n" + (d.domainGap?.label || "DOMAIN GAP"));
     (d.domainGap?.bullets || []).forEach(b => lines.push("  - " + b));
     lines.push("\nWATCH THESE");
-    (d.watchThese || []).forEach(w => lines.push("  ❌  " + w));
+    (d.watchThese || []).forEach(w => lines.push("  \u274c  " + w));
     lines.push("\n30 / 60 / 90");
     const ttt = d.thirtysixtynety || {};
     ["thirty", "sixty", "ninety"].forEach(k => (ttt[k] || []).forEach((b, i) => lines.push("  " + (i === 0 ? (k === "thirty" ? "30" : k === "sixty" ? "60" : "90") + " — " : "    ") + b)));
@@ -2071,11 +2115,9 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
 
   function saveGapCorrection() {
     if (!gapForm.skill.trim() || !gapForm.context.trim()) return;
-    // Save to card
     const newCorrection = { gapTitle: gapForm.skill.trim(), explanation: gapForm.context.trim(), verifiedAt: getToday() };
     const updatedCorrections = [...cardCorrections, newCorrection];
     if (onUpdateCard) onUpdateCard({ corrections: updatedCorrections });
-    // Merge into profile verified skills
     if (onUpdateProfile) {
       const updatedSkills = mergeVerifiedSkill(profile.verifiedSkills, gapForm.skill.trim(), gapForm.context.trim(), card?.id);
       onUpdateProfile({ verifiedSkills: updatedSkills });
@@ -2123,16 +2165,16 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
       </div>
       {company && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "14px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {company}</span></div>}
       <button onClick={run} disabled={loading} style={{ ...S.btn, marginBottom: "20px", opacity: loading ? 0.5 : 1, display: "flex", gap: "8px", alignItems: "center" }}>
-        {loading ? <><Spinner /> Building brief…</> : `Generate ${depthLabels[depth]} Brief`}
+        {loading ? <><Spinner /> Building brief...</> : `Generate ${depthLabels[depth]} Brief`}
       </button>
       {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
       {prepData && (
         <>
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px", padding: "10px 14px", background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "6px", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "11px", color: "#c9a84c", fontWeight: 600 }}>↓ Download for the call</span>
+            <span style={{ fontSize: "11px", color: "#c9a84c", fontWeight: 600 }}>Download for the call</span>
             {blob && <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${filename}.docx`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 12px" }}>DOCX</button>}
             {pdfBlob && <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${filename}.pdf`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 12px" }}>PDF</button>}
-            {blob && <SaveToDriveBtn blob={blob} filename={`${filename}.docx`} onSaved={() => {}} disabled={!driveToken} />}
+            {blob && <SaveToDriveBtn blob={blob} filename={`${filename}.docx`} onSaved={() => {}} disabled={!driveToken} userEmail={profile.email} />}
             <div style={{ marginLeft: "auto" }}><CopyBtn text={rawText} /></div>
           </div>
           <BriefView data={prepData} />
@@ -2145,7 +2187,6 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
         </div>
       )}
 
-      {/* Gap Correction Panel — shown after brief is generated */}
       {prepData && (
         <div style={{ marginTop: "20px", background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
@@ -2158,7 +2199,7 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
             <div style={{ marginBottom: "10px" }}>
               {cardCorrections.map((c, i) => (
                 <div key={i} style={{ display: "flex", gap: "8px", alignItems: "flex-start", padding: "7px 10px", background: "rgba(74,222,128,0.05)", border: "1px solid rgba(74,222,128,0.15)", borderRadius: "6px", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "11px", color: "#4ade80", flexShrink: 0 }}>✓</span>
+                  <span style={{ fontSize: "11px", color: "#4ade80", flexShrink: 0 }}>\u2713</span>
                   <div>
                     <div style={{ fontSize: "12px", fontWeight: 600, color: "#4ade80" }}>{c.gapTitle}</div>
                     <div style={{ fontSize: "11px", color: "#6a8870", marginTop: "2px" }}>{c.explanation}</div>
@@ -2184,7 +2225,7 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
                 <button onClick={saveGapCorrection} disabled={!gapForm.skill.trim() || !gapForm.context.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 16px", opacity: !gapForm.skill.trim() || !gapForm.context.trim() ? 0.5 : 1 }}>
                   Save Correction
                 </button>
-                {gapSaved && <span style={{ fontSize: "11px", color: "#4ade80" }}>✓ Saved to card and profile</span>}
+                {gapSaved && <span style={{ fontSize: "11px", color: "#4ade80" }}>Saved to card and profile</span>}
               </div>
             </div>
           )}
@@ -2267,7 +2308,7 @@ function StoryCard({ story, onEdit, onDelete }) {
         </div>
         <div style={{ display: "flex", gap: "6px" }}>
           <button onClick={() => onEdit(story)} style={{ ...S.btnGhost, fontSize: "11px", padding: "3px 8px" }}>Edit</button>
-          <button onClick={() => onDelete(story.id)} style={{ ...S.btnGhost, fontSize: "11px", padding: "3px 8px", color: "#8a4040" }}>✕</button>
+          <button onClick={() => onDelete(story.id)} style={{ ...S.btnGhost, fontSize: "11px", padding: "3px 8px", color: "#8a4040" }}>&#10005;</button>
         </div>
       </div>
       {expanded && (
@@ -2334,7 +2375,7 @@ function MyStoriesTab({ profile, stories: storiesProp, setStories }) {
         <div style={S.label}>My Stories</div>
         <div style={{ display: "flex", gap: "8px" }}>
           <button onClick={extract} disabled={extracting} style={{ ...S.btnGhost, fontSize: "11px", opacity: extracting ? 0.5 : 1 }}>
-            {extracting ? <><Spinner size={11} /> Extracting…</> : "Extract from Resume"}
+            {extracting ? <><Spinner size={11} /> Extracting...</> : "Extract from Resume"}
           </button>
           <button onClick={() => setAdding(true)} style={{ ...S.btn, fontSize: "11px", padding: "5px 12px" }}>+ New</button>
         </div>
@@ -2375,7 +2416,7 @@ function ResumeVariantManager({ profile, setProfile }) {
           <span style={{ fontSize: "12px", color: v.id === profile.activeResumeId ? "#c9a84c" : "#8a85a0" }}>{v.name}</span>
           <div style={{ display: "flex", gap: "6px" }}>
             {v.id !== profile.activeResumeId && <button onClick={() => activate(v.id)} style={{ ...S.btnGhost, fontSize: "10px", padding: "2px 8px" }}>Activate</button>}
-            <button onClick={() => remove(v.id)} style={{ ...S.btnGhost, fontSize: "10px", padding: "2px 8px", color: "#8a4040" }}>✕</button>
+            <button onClick={() => remove(v.id)} style={{ ...S.btnGhost, fontSize: "10px", padding: "2px 8px", color: "#8a4040" }}>&#10005;</button>
           </div>
         </div>
       ))}
@@ -2447,18 +2488,18 @@ function ProfileTab({ profile, setProfile }) {
       ))}
       <div style={{ marginBottom: "12px" }}>
         <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "4px" }}>Professional Summary (optional)</div>
-        <textarea value={profile.background || ""} onChange={e => setProfile(p => ({ ...p, background: e.target.value }))} rows={4} style={{ ...S.input, width: "100%", resize: "vertical" }} placeholder="Additional context for AI (achievements, target roles, constraints)…" />
+        <textarea value={profile.background || ""} onChange={e => setProfile(p => ({ ...p, background: e.target.value }))} rows={4} style={{ ...S.input, width: "100%", resize: "vertical" }} placeholder="Additional context for AI (achievements, target roles, constraints)..." />
       </div>
       <div style={{ marginBottom: "16px" }}>
         <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "8px" }}>Resume Text</div>
-        <textarea value={resumeText} onChange={e => setResumeText(e.target.value)} rows={8} style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px" }} placeholder="Paste resume text here, or upload a file below…" />
+        <textarea value={resumeText} onChange={e => setResumeText(e.target.value)} rows={8} style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px" }} placeholder="Paste resume text here, or upload a file below..." />
         <input type="file" accept=".txt,.md,.docx,.pdf" onChange={handleFile} style={{ marginTop: "8px", fontSize: "11px", color: "#6a6880" }} />
         <div style={{ fontSize: "10px", color: "#3a3860", marginTop: "4px" }}>Accepts .docx, .txt, .md, or .pdf. Pre-Intel roles (Proudcloud, Bookmans) are automatically stripped.</div>
       </div>
       <button onClick={saveProfile} disabled={extracting} style={{ ...S.btn, display: "flex", gap: "8px", alignItems: "center", opacity: extracting ? 0.5 : 1 }}>
-        {extracting ? <><Spinner /> Extracting contact…</> : "Save Profile"}
+        {extracting ? <><Spinner /> Extracting contact...</> : "Save Profile"}
       </button>
-      {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>✓ Profile saved</div>}
+      {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>Profile saved</div>}
       <ResumeVariantManager profile={profile} setProfile={setProfile} />
     </div>
   );
@@ -2475,7 +2516,7 @@ function WhatYouSent({ card, onClose }) {
     <div style={{ background: "rgba(10,10,24,0.98)", borderBottom: "1px solid #1a1830", padding: "12px 20px", flexShrink: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
         <div style={{ fontSize: "10px", fontWeight: 700, color: "#c9a84c", letterSpacing: "0.1em", textTransform: "uppercase" }}>What You Sent</div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#4a4860", fontSize: "12px", cursor: "pointer" }}>hide ↑</button>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "#4a4860", fontSize: "12px", cursor: "pointer" }}>hide</button>
       </div>
       <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
         {card.resumeText && <button onClick={() => setView("resume")} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "resume" ? "#4ade80" : "#2a2840", background: view === "resume" ? "rgba(74,222,128,0.1)" : "transparent", color: view === "resume" ? "#4ade80" : "#6a6880", cursor: "pointer" }}>Resume{card.resumeType ? ` (${card.resumeType})` : ""}</button>}
@@ -2496,6 +2537,17 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
 
   const liveCard = cards.find(c => c.id === card.id) || card;
   const hasSent = liveCard.resumeText || liveCard.coverLetterText;
+
+  // Intercept browser back button — close overlay instead of navigating away
+  // (prevents the "OAuth state is invalid" error from Netlify Identity)
+  useEffect(() => {
+    window.history.pushState({ narrativeOverlay: true }, "");
+    const handlePop = () => onClose();
+    window.addEventListener("popstate", handlePop);
+    return () => {
+      window.removeEventListener("popstate", handlePop);
+    };
+  }, []);
 
   function updateCard(updates) {
     setCards(prev => prev.map(c => c.id === card.id ? { ...c, ...updates } : c));
@@ -2524,9 +2576,9 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
               <input value={liveCard.company || ""} onChange={e => updateCard({ company: e.target.value })} placeholder="Company" style={{ background: "transparent", border: "none", color: "#e8e6f0", fontSize: "15px", fontWeight: 700, outline: "none", minWidth: "80px", maxWidth: "160px" }} />
-              <span style={{ color: "#3a3860" }}>·</span>
+              <span style={{ color: "#3a3860" }}>\u00b7</span>
               <input value={liveCard.title || ""} onChange={e => updateCard({ title: e.target.value })} placeholder="Title" style={{ background: "transparent", border: "none", color: "#8a85a0", fontSize: "13px", outline: "none", minWidth: "80px", maxWidth: "200px" }} />
-              {liveCard.jdUrl && <a href={liveCard.jdUrl} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#c9a84c", textDecoration: "none", flexShrink: 0 }}>🔗 Post ↗</a>}
+              {liveCard.jdUrl && <a href={liveCard.jdUrl} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#c9a84c", textDecoration: "none", flexShrink: 0 }}>Post</a>}
             </div>
             <div style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "2px" }}>
               {STAGES.map(s => (
@@ -2536,13 +2588,13 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginLeft: "12px" }}>
             {hasSent && <button onClick={() => setShowSent(v => !v)} style={{ fontSize: "10px", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>What I Sent</button>}
-            <button onClick={onClose} style={{ background: "none", border: "none", color: "#6a6880", fontSize: "20px", cursor: "pointer", lineHeight: 1 }}>✕</button>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "#6a6880", fontSize: "20px", cursor: "pointer", lineHeight: 1 }}>&#10005;</button>
           </div>
         </div>
       </div>
       {hasSent && showSent && <WhatYouSent card={liveCard} onClose={() => setShowSent(false)} />}
       <div style={{ padding: "8px 20px", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
-        <textarea value={jd} onChange={e => setJd(e.target.value)} rows={2} placeholder="Paste job description here… (URL auto-detected)" style={{ ...S.input, width: "100%", fontSize: "11px", resize: "vertical" }} />
+        <textarea value={jd} onChange={e => setJd(e.target.value)} rows={2} placeholder="Paste job description here... (URL auto-detected)" style={{ ...S.input, width: "100%", fontSize: "11px", resize: "vertical" }} />
       </div>
       <div style={{ display: "flex", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
         {TABS.map(t => (
@@ -2565,12 +2617,12 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
 
 function DrawerNav({ active, onChange, onClose, user }) {
   const items = [
-    { id: "dashboard", icon: "⊞", label: "Dashboard" },
-    { id: "tracker",   icon: "⬡", label: "Tracker" },
-    { id: "analyze",   icon: "✦", label: "Fit Check" },
-    { id: "stories",   icon: "◈", label: "Stories" },
-    { id: "prep",      icon: "◎", label: "Interview Prep" },
-    { id: "profile",   icon: "◉", label: "Profile" },
+    { id: "dashboard", icon: "\u229e", label: "Dashboard" },
+    { id: "tracker",   icon: "\u2B21", label: "Tracker" },
+    { id: "analyze",   icon: "\u2726", label: "Fit Check" },
+    { id: "stories",   icon: "\u25C8", label: "Stories" },
+    { id: "prep",      icon: "\u25CE", label: "Interview Prep" },
+    { id: "profile",   icon: "\u25C9", label: "Profile" },
   ];
   return (
     <>
@@ -2578,7 +2630,7 @@ function DrawerNav({ active, onChange, onClose, user }) {
       <div style={{ position: "fixed", top: 0, left: 0, bottom: 0, width: "260px", background: "#0c0e1e", borderRight: "1px solid #1a1830", zIndex: 151, display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "18px 20px 16px", borderBottom: "1px solid #1a1830", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.06em", color: "#c9a84c" }}>NARRATIVE<span style={{ color: "#4a4860" }}>OS</span></div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#4a4860", fontSize: "16px", cursor: "pointer", lineHeight: 1 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#4a4860", fontSize: "16px", cursor: "pointer", lineHeight: 1 }}>&#10005;</button>
         </div>
         <div style={{ flex: 1, paddingTop: "8px", overflowY: "auto" }}>
           {items.map(item => (
@@ -2638,9 +2690,9 @@ function CoachingNudge({ cards: cardsProp, stories: storiesProp, profile }) {
   if (!loading && !nudge) return null;
   return (
     <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "8px", padding: "12px 14px" }}>
-      <span style={{ fontSize: "13px", flexShrink: 0, marginTop: "1px" }}>💡</span>
+      <span style={{ fontSize: "13px", flexShrink: 0, marginTop: "1px" }}>&#x1F4A1;</span>
       {loading
-        ? <span style={{ fontSize: "12px", color: "#4a4060", fontStyle: "italic" }}>Reading your pipeline…</span>
+        ? <span style={{ fontSize: "12px", color: "#4a4060", fontStyle: "italic" }}>Reading your pipeline...</span>
         : <span style={{ fontSize: "12px", color: "#c9a84c", lineHeight: 1.6 }}>{nudge}</span>
       }
     </div>
@@ -2679,11 +2731,10 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         <CoachingNudge cards={cards} stories={stories} profile={profile} />
       </div>
 
-      {/* Amber alert: no resume on file */}
       {!hasResume && (
         <div style={{ background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.35)", borderRadius: "8px", padding: "12px 16px", marginBottom: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "16px", flexShrink: 0 }}>⚠️</span>
+            <span style={{ fontSize: "16px", flexShrink: 0 }}>&#x26A0;&#xFE0F;</span>
             <div>
               <div style={{ fontSize: "13px", fontWeight: 600, color: "#c9a84c" }}>No resume on file</div>
               <div style={{ fontSize: "11px", color: "#7a6030", marginTop: "2px" }}>Resume is required for Fit Check, interview prep, and story extraction.</div>
@@ -2695,12 +2746,11 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         </div>
       )}
 
-      {/* Pipeline widget */}
       <div onClick={() => onNavigate("tracker")}
         style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px", cursor: "pointer" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <span style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase" }}>Pipeline</span>
-          <span style={{ fontSize: "10px", color: "#3a3860" }}>Open Tracker →</span>
+          <span style={{ fontSize: "10px", color: "#3a3860" }}>Open Tracker</span>
         </div>
         <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>
           {STAGES.map(stage => {
@@ -2716,7 +2766,6 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         </div>
       </div>
 
-      {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "12px" }}>
         {[
           { label: "Applied",  value: appliedCount,    color: "#fbbf24" },
@@ -2730,14 +2779,13 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         ))}
       </div>
 
-      {/* Quick actions */}
       <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px" }}>
         <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "12px" }}>Quick Actions</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {[
-            { label: "Fit Check a JD",    sub: "Paste a JD and score your fit",                                        nav: "analyze", icon: "✦", warn: false },
-            { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "◈", warn: stories.length === 0 },
-            { label: "Update Profile",    sub: hasResume ? "Resume on file" : "No resume yet — add one",               nav: "profile", icon: "◉", warn: !hasResume },
+            { label: "Fit Check a JD",    sub: "Paste a JD and score your fit",                                        nav: "analyze", icon: "\u2726", warn: false },
+            { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "\u25C8", warn: stories.length === 0 },
+            { label: "Update Profile",    sub: hasResume ? "Resume on file" : "No resume yet — add one",               nav: "profile", icon: "\u25C9", warn: !hasResume },
           ].map(a => (
             <button key={a.nav} onClick={() => onNavigate(a.nav)} style={{
               display: "flex", alignItems: "center", gap: "12px", padding: "10px",
@@ -2750,13 +2798,12 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
                 <div style={{ fontSize: "13px", fontWeight: 600, color: a.warn ? "#c9a84c" : "#c0bce0" }}>{a.label}</div>
                 <div style={{ fontSize: "10px", color: a.warn ? "#7a6030" : "#3a3860", marginTop: "2px" }}>{a.sub}</div>
               </div>
-              <span style={{ fontSize: "11px", color: "#2a2840" }}>›</span>
+              <span style={{ fontSize: "11px", color: "#2a2840" }}>&#x203A;</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Active resume strip */}
       <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "8px", padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: "9px", color: "#3a3860", textTransform: "uppercase", letterSpacing: "0.08em" }}>Active Resume</div>
@@ -2764,22 +2811,21 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
             {hasResume ? (activeVariant?.name || "Base Resume") : "None uploaded"}
           </div>
         </div>
-        <button onClick={() => onNavigate("profile")} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px" }}>Manage →</button>
+        <button onClick={() => onNavigate("profile")} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px" }}>Manage</button>
       </div>
     </div>
   );
 }
 
-// Interview Prep standalone — routes to Tracker to pick a card
 function InterviewPrepStandalone({ onNavigate }) {
   return (
     <div style={{ padding: "60px 20px", textAlign: "center" }}>
-      <div style={{ fontSize: "28px", marginBottom: "12px", color: "#3a3860" }}>◎</div>
+      <div style={{ fontSize: "28px", marginBottom: "12px", color: "#3a3860" }}>&#x25CE;</div>
       <div style={{ fontSize: "16px", fontWeight: 600, color: "#c8c4e8", marginBottom: "8px" }}>Interview Prep</div>
       <div style={{ fontSize: "13px", color: "#4a4860", lineHeight: 1.7, marginBottom: "24px" }}>
         Prep is launched from a specific role card.<br />Open a card in the Tracker to start your brief.
       </div>
-      <button onClick={() => onNavigate("tracker")} style={S.btn}>Go to Tracker →</button>
+      <button onClick={() => onNavigate("tracker")} style={S.btn}>Go to Tracker</button>
     </div>
   );
 }
@@ -2852,7 +2898,6 @@ export default function NarrativeOS() {
   return (
     <div style={{ background: "#080814", minHeight: "100vh", fontFamily: "'DM Sans', system-ui, sans-serif", color: "#e8e6f0" }}>
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px 10px", borderBottom: "1px solid #1a1830", position: "sticky", top: 0, background: "rgba(8,8,20,0.95)", zIndex: 50, backdropFilter: "blur(8px)" }}>
         <button onClick={() => setDrawerOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 6px", display: "flex", flexDirection: "column", gap: "4px" }}>
           <span style={{ display: "block", width: "18px", height: "2px", background: "#6a6880", borderRadius: "1px" }} />
@@ -2861,7 +2906,7 @@ export default function NarrativeOS() {
         </button>
         <div style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.06em", color: "#c9a84c" }}>NARRATIVE<span style={{ color: "#4a4860" }}>OS</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {apiLocked && <span style={{ fontSize: "10px", color: "#c9a84c", background: "rgba(201,168,76,0.1)", padding: "2px 8px", borderRadius: "10px" }}>⏳</span>}
+          {apiLocked && <span style={{ fontSize: "10px", color: "#c9a84c", background: "rgba(201,168,76,0.1)", padding: "2px 8px", borderRadius: "10px" }}>&#x23F3;</span>}
           {cost > 0 && <span style={{ fontSize: "10px", color: "#3a3860" }}>${cost.toFixed(4)}</span>}
           {user && (
             <div title={user.email} style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(201,168,76,0.15)", border: "1px solid rgba(201,168,76,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#c9a84c", flexShrink: 0, cursor: "default", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -2871,10 +2916,8 @@ export default function NarrativeOS() {
         </div>
       </div>
 
-      {/* Drawer */}
       {drawerOpen && <DrawerNav active={activeTab} onChange={setActiveTab} onClose={() => setDrawerOpen(false)} user={user} />}
 
-      {/* Main content */}
       <div style={{ paddingBottom: "20px" }}>
         {activeTab === "dashboard" && (
           <DashboardTab cards={cards} stories={stories} profile={profile} onNavigate={setActiveTab} />
@@ -2884,7 +2927,6 @@ export default function NarrativeOS() {
             <Board cards={cards} onCardClick={c => setOpenCard(c)} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} />
           </div>
         )}
-
         {activeTab === "analyze" && (
           <AnalyzeTab
             stories={stories}

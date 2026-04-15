@@ -1,9 +1,15 @@
-// NarrativeOS v25.1
-// Changes from v25:
-//   - Company name prompt before build/download when card.company is blank
-//   - Filename pattern: LastName_Company (no format suffix)
-//   - Resumes + cover letters route to "Resumes" Drive folder
-//   - Back button in RoleWorkspace closes overlay instead of triggering OAuth redirect
+// NarrativeOS v26
+// Changes from v25.1:
+//   - FACT LOCK: hallucination prevention in resume generation and refinement
+//   - Scoring context expansion: jdAnalyzer resume slice 1200 -> 3500; stories now include hook + competencies
+//   - Positioning Intelligence: new profile.prepContext field feeds scoring, resume, cover letter, and prep
+//   - Story matching: top 3 JD-matched stories auto-injected into resume strategy + cover letter
+//   - Cover letter: explicit "written FROM candidate TO employer" perspective; now reads verifiedSkills + prepContext
+//   - RoleWorkspace: JD view has expand/collapse toggle; header inputs stop click propagation
+//   - Fix: JSON.stringify bug that was wrapping strategy string in quotes before the render call
+//   - Fix: CoachingNudge was gated on VITE_ANTHROPIC_API_KEY (never set in production)
+//   - Fix: popstate stale closure + history stack pollution in RoleWorkspace
+//   - Rename: "Fit Check" -> "Analyze Fit"; run button -> "Run Fit Analysis"
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
@@ -46,6 +52,7 @@ const DEFAULT_PROFILE = {
   resumeVariants: [],
   activeResumeId: null,
   verifiedSkills: [],
+  prepContext: "",
 };
 
 const RESEARCH_STEPS = [
@@ -176,7 +183,10 @@ Score all ${jobCount} jobs. No preamble.`,
       ? `\n\nUSER CORRECTIONS — treat as verified facts, do NOT re-flag:\n${Object.entries(corrections).map(([k, v]) => `- "${k}": ${v}`).join("\n")}`
       : "";
     const vsContext = verifiedSkillsContext(profile.verifiedSkills);
-    const resumeText = (profile.resumeText || "").slice(0, 1200);
+    const prepContextText = profile.prepContext?.trim()
+      ? `\n\nINTERVIEW POSITIONING INTELLIGENCE — treat as verified framing, not speculation:\n${profile.prepContext.slice(0, 1500)}`
+      : "";
+    const resumeText = (profile.resumeText || "").slice(0, 3500);
     const hasStories = stories && stories.length > 0;
     const profileContext = hasStories ? `RESUME BASELINE:\n${resumeText}` : `RESUME (no stories yet — evaluate from resume only):\n${resumeText}`;
     return `You are a senior career strategist evaluating fit for ${profile.name || "this candidate"}.
@@ -185,7 +195,7 @@ CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${tc.scope}
 ${tc.expectations}
 
-${profileContext}${correctionText}${vsContext ? "\n\n" + vsContext : ""}
+${profileContext}${correctionText}${prepContextText}${vsContext ? "\n\n" + vsContext : ""}
 
 EVALUATION PHILOSOPHY:
 Assess the whole person — career arc, demonstrated impact, and transferable experience.
@@ -207,14 +217,20 @@ Return ONLY a valid JSON object — no markdown, no backticks:
 }`;
   },
 
-  resumeStrategy: (profile, resumeType = "chronological") => {
+  resumeStrategy: (profile, resumeType = "chronological", topStories = []) => {
     const tc = tierContext(profile);
     const profileContext = [
       profile.title && `Title: ${profile.title}`,
       profile.background && `Background: ${profile.background}`,
-      profile.resumeText && `Resume (first 800 chars): ${profile.resumeText.slice(0, 800)}`,
+      profile.resumeText && `Resume (first 1200 chars): ${profile.resumeText.slice(0, 1200)}`,
       verifiedSkillsContext(profile.verifiedSkills),
+      profile.prepContext && `Positioning Intelligence: ${profile.prepContext.slice(0, 800)}`,
     ].filter(Boolean).join("\n");
+    const storiesBlock = topStories.length > 0
+      ? `\n\nCANDIDATE STORY LIBRARY (top matches for this JD — use as verified proof points in bulletEdits and bulletsToPromote):\n${topStories.map((s, i) =>
+          `${i + 1}. "${s.title || ""}" [${s.competencies?.join(", ") || ""}]\n   Hook: ${s.hook || ""}\n   Result: ${s.result || ""}\n   Best used for: ${s.useFor || s.why || ""}`
+        ).join("\n\n")}\n`
+      : "";
 
     const typeGuidance = resumeType === "hybrid"
       ? `RESUME TYPE: HYBRID (Potential-Forward Hankel)
@@ -231,7 +247,7 @@ Strategy should upgrade language per Hankel framework while preserving chronolog
 bulletEdits should add agreeableness signals, upgrade fading vocabulary, and add potential bridges.`;
 
     return `You are a senior executive resume strategist for ${profile.name || "this candidate"}.
-${profileContext}
+${profileContext}${storiesBlock}
 
 CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${tc.scope}
@@ -332,13 +348,20 @@ ${_PAGE_RULES}
 ${_PROJECTS}`;
   },
 
-  coverLetter: (profile, company, role, notes, toneOverride) => {
+  coverLetter: (profile, company, role, notes, toneOverride, topStories = []) => {
     const tc = tierContext(profile);
     const profileContext = [
       profile.title && `Title: ${profile.title}`,
       profile.background && `Background: ${profile.background}`,
       profile.resumeText && `Key experience: ${profile.resumeText.slice(0, 600)}`,
+      profile.prepContext && `Positioning Intelligence: ${profile.prepContext.slice(0, 600)}`,
+      verifiedSkillsContext(profile.verifiedSkills),
     ].filter(Boolean).join("\n");
+    const storiesBlock = topStories.length > 0
+      ? `\nTOP PROOF POINTS FROM CANDIDATE'S STORY LIBRARY (use 1-2 as narrative anchors in the body — do not list all of them):\n${topStories.map((s, i) =>
+          `${i + 1}. ${s.hook || s.result || ""} [from: "${s.title || ""}"]`
+        ).join("\n")}\n`
+      : "";
     const TONES = {
       executive: "Boardroom-level voice. Commercially framed. Lead with enterprise impact and financial outcomes. No warmth padding.",
       warm:      "Warm, collaborative tone. Lead with mission alignment and team contribution. Genuine enthusiasm without being sycophantic.",
@@ -348,8 +371,13 @@ ${_PROJECTS}`;
     const voiceInstruction = toneOverride && TONES[toneOverride]
       ? `TONE OVERRIDE: ${TONES[toneOverride]}`
       : `VOICE GUIDANCE: ${tc.voice}`;
-    return `You are writing a cover letter for ${profile.name || "this candidate"}.
-${profileContext}
+    return `PERSPECTIVE — CRITICAL:
+You are writing a cover letter FROM ${profile.name || "the candidate"} (the candidate) TO the hiring company (${company || "this company"}) for the ${role || "role"} position.
+The letter is written in the candidate's first-person voice, addressing the employer directly.
+Use "I" / "my" / "I've" when referring to the candidate's experience. Use "you" / "your team" / "the company" / "${company || "your organization"}" when referring to the employer.
+Do NOT write this as a letter addressed TO the candidate (second-person narration about them). The candidate IS the author.
+
+${profileContext}${storiesBlock}
 
 CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${voiceInstruction}
@@ -773,6 +801,26 @@ async function extractContactFromResume(resumeText) {
   }
 }
 
+// ─── Story matching ────────────────────────────────────────────────────────
+// Given a JD, returns the top N stories ranked by relevance. Each returned
+// story is enriched with `useFor` and `why` fields from the matcher so that
+// downstream prompts (resume strategy, cover letter) can use them as proof points.
+async function matchTopStories(stories, jd, topN = 3) {
+  if (!stories?.length || !jd?.trim()) return [];
+  try {
+    const raw = await callClaude(PROMPTS.storyMatch(stories), `Job Description:\n${jd}`, 600);
+    const m = raw.match(/\[[\s\S]*\]/);
+    if (!m) return [];
+    const arr = JSON.parse(m[0]);
+    return arr.slice(0, topN).map(item => {
+      const s = stories[item.index];
+      return s ? { ...s, useFor: item.useFor, why: item.why } : null;
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. GOOGLE DRIVE INTEGRATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -971,9 +1019,20 @@ async function buildCoverLetterDocxBlob(letterText, company, role, profile) {
 }
 
 async function buildFinalResumeText(baseResume, strategy, jd, resumeType = "chronological") {
+  const factLock = `FACT LOCK — THIS IS A HARD CONSTRAINT:
+Every bullet, metric, title, company name, date range, and achievement in the output MUST be directly traceable to the VERIFIED BASE RESUME below.
+Do NOT invent, interpolate, or embellish any fact not explicitly present in the base resume.
+Do NOT upgrade a number (e.g. "reduced by 25%" when the resume says "reduced cycle time" without a number).
+Do NOT add team sizes, dollar amounts, or percentages that are not in the base resume.
+If the strategy recommends a bullet you cannot verify, OMIT IT rather than fabricate it.
+Hallucinated metrics are a disqualifying error — omission is always safer than invention.
+
+VERIFIED BASE RESUME (single source of truth):
+${stripPreIntelRoles(baseResume)}`;
+
   return callClaude(
     PROMPTS.resumeRender(resumeType),
-    `Base Resume:\n${stripPreIntelRoles(baseResume)}\n\nApproved Strategy:\n${JSON.stringify(strategy, null, 2)}\n\nJob Description:\n${jd}`,
+    `${factLock}\n\nApproved Strategy:\n${strategy}\n\nJob Description:\n${jd}`,
     2700
   );
 }
@@ -1433,8 +1492,10 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
 
   const runWithCorrections = async (activeCorrections) => {
     if (!jd.trim()) return;
-    const storyList = stories.length > 0 ? stories.map((s, i) => `${i + 1}. "${s.title}" — ${s.competencies?.join(", ")} | Result: ${s.result}`).join("\n") : "";
-    const userCtx = stories.length > 0 ? `INTERVIEW STORIES:\n${storyList}\n\n` : "";
+    const storyList = stories.length > 0 ? stories.map((s, i) =>
+      `${i + 1}. "${s.title}" [${s.competencies?.join(", ") || ""}]\nHook: ${s.hook || ""}\nResult: ${s.result || ""}`
+    ).join("\n\n") : "";
+    const userCtx = stories.length > 0 ? `INTERVIEW STORIES (use these as verified proof points in scoring):\n${storyList}\n\n` : "";
     const text = await callClaude(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 3000);
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error("Could not parse analysis response");
@@ -1510,7 +1571,7 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
 
       <button onClick={run} disabled={!jd.trim() || loading || reScoring || apiLocked}
         style={{ ...S.btn, opacity: !jd.trim() || loading || reScoring || apiLocked ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px", width: "100%" }}>
-        {loading ? <><Spinner /> Analyzing...</> : "Run Fit Check"}
+        {loading ? <><Spinner /> Analyzing...</> : "Run Fit Analysis"}
       </button>
 
       {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "16px" }}>{error}</div>}
@@ -1631,7 +1692,7 @@ function resumeFilename(profile, company) {
 // RESUME TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResumeTab({ profile, card, jd, onSaveToCard }) {
+function ResumeTab({ profile, card, jd, stories = [], onSaveToCard }) {
   const [resumeType, setResumeType] = useState(card?.resumeType || "chronological");
   const [strategy, setStrategy] = useState("");
   const [finalResume, setFinalResume] = useState(card?.resumeText || "");
@@ -1658,8 +1719,13 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
     setShowCompanyInput(false);
     setLoading(true); setError(""); setStrategy(""); setFinalResume(""); setBlob(null); setPdfBlob(null); setFeedback("");
     try {
+      let topStories = [];
+      if (stories?.length && jd?.trim()) {
+        setPhase("Matching top stories...");
+        topStories = await matchTopStories(stories, jd);
+      }
       setPhase("Building strategy...");
-      const strat = await callClaude(PROMPTS.resumeStrategy(profile, resumeType), `JD:\n${jd || "(none)"}\n\nBase resume:\n${baseResume}`, 1200);
+      const strat = await callClaude(PROMPTS.resumeStrategy(profile, resumeType, topStories), `JD:\n${jd || "(none)"}\n\nBase resume:\n${baseResume}`, 1200);
       setStrategy(strat);
       setPhase("Rendering resume...");
       const final = await buildFinalResumeText(baseResume, strat, jd, resumeType);
@@ -1679,8 +1745,14 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
     setRefining(true);
     try {
       const refined = await callClaude(
-        `You are refining a resume. Apply the user's feedback precisely. Maintain all formatting rules, Hankel language, and ${resumeType} structure. Return only the revised resume text.`,
-        `CURRENT RESUME:\n${finalResume}\n\nFEEDBACK TO APPLY:\n${feedback}`,
+        `You are refining a resume. Apply the user's feedback precisely. Maintain all formatting rules, Hankel language, and ${resumeType} structure. Return only the revised resume text.
+
+FACT LOCK — HARD CONSTRAINT:
+Every metric, achievement, title, company name, and date in the output must already exist in the CURRENT RESUME below.
+Do NOT add, invent, or upgrade any fact not already present.
+If the feedback requests a metric or claim you cannot find in the current resume, apply the structural/language change and leave the metric as-is.
+Omission is always safer than invention.`,
+        `CURRENT RESUME (source of truth — no new facts may be added):\n${finalResume}\n\nFEEDBACK TO APPLY:\n${feedback}`,
         2000
       );
       setFinalResume(refined);
@@ -1778,7 +1850,7 @@ function ResumeTab({ profile, card, jd, onSaveToCard }) {
 // COVER LETTER TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
+function CoverLetterTab({ profile, card, jd, stories = [], onSaveToCard }) {
   const [letter, setLetter] = useState(card?.coverLetterText || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1801,8 +1873,9 @@ function CoverLetterTab({ profile, card, jd, onSaveToCard }) {
     setShowCompanyInput(false);
     setLoading(true); setError(""); setLetter(""); setBlob(null); setPdfBlob(null); setFeedback(""); setAddedToCard(false);
     try {
+      const topStories = (stories?.length && jd?.trim()) ? await matchTopStories(stories, jd) : [];
       const result = await callClaude(
-        PROMPTS.coverLetter(profile, effectiveCompany, role, jd || ""),
+        PROMPTS.coverLetter(profile, effectiveCompany, role, jd || "", null, topStories),
         `Base resume:\n${base}\n\nJD:\n${jd || "(none)"}`,
         1000
       );
@@ -2490,6 +2563,19 @@ function ProfileTab({ profile, setProfile }) {
         <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "4px" }}>Professional Summary (optional)</div>
         <textarea value={profile.background || ""} onChange={e => setProfile(p => ({ ...p, background: e.target.value }))} rows={4} style={{ ...S.input, width: "100%", resize: "vertical" }} placeholder="Additional context for AI (achievements, target roles, constraints)..." />
       </div>
+      <div style={{ marginBottom: "12px" }}>
+        <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "4px" }}>Positioning Intelligence</div>
+        <div style={{ fontSize: "10px", color: "#3a3860", marginBottom: "6px", lineHeight: 1.5 }}>
+          Paste proof points, interviewer research, comp anchors, and framing notes here. This feeds the Fit Analysis scorer, resume strategy, and cover letter — not your resume text itself.
+        </div>
+        <textarea
+          value={profile.prepContext || ""}
+          onChange={e => setProfile(p => ({ ...p, prepContext: e.target.value }))}
+          rows={7}
+          style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px", lineHeight: 1.6 }}
+          placeholder={"Example:\n- Full P&L owner at CCR and EDF — budget, forecast, board reporting\n- $28M EBITDA, $13M portfolio, 27% compliance reduction, $6.8M ERP\n- Deployed production AI (NarrativeOS, ClauseLens) on Anthropic API\n- Target comp: $210K base\n- Likely objection: no SaaS background — counter with adjacent skills + hands-on AI"}
+        />
+      </div>
       <div style={{ marginBottom: "16px" }}>
         <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "8px" }}>Resume Text</div>
         <textarea value={resumeText} onChange={e => setResumeText(e.target.value)} rows={8} style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px" }} placeholder="Paste resume text here, or upload a file below..." />
@@ -2538,11 +2624,20 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   const liveCard = cards.find(c => c.id === card.id) || card;
   const hasSent = liveCard.resumeText || liveCard.coverLetterText;
 
+  const [jdExpanded, setJdExpanded] = useState(false);
+
+  // Keep a ref to onClose so the popstate listener doesn't get a stale closure
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   // Intercept browser back button — close overlay instead of navigating away
-  // (prevents the "OAuth state is invalid" error from Netlify Identity)
+  // (prevents the "OAuth state is invalid" error from Netlify Identity).
+  // Guard the pushState so opening multiple cards doesn't pollute history.
   useEffect(() => {
-    window.history.pushState({ narrativeOverlay: true }, "");
-    const handlePop = () => onClose();
+    if (!window.history.state?.narrativeOverlay) {
+      window.history.pushState({ narrativeOverlay: true }, "");
+    }
+    const handlePop = () => onCloseRef.current && onCloseRef.current();
     window.addEventListener("popstate", handlePop);
     return () => {
       window.removeEventListener("popstate", handlePop);
@@ -2575,9 +2670,23 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              <input value={liveCard.company || ""} onChange={e => updateCard({ company: e.target.value })} placeholder="Company" style={{ background: "transparent", border: "none", color: "#e8e6f0", fontSize: "15px", fontWeight: 700, outline: "none", minWidth: "80px", maxWidth: "160px" }} />
-              <span style={{ color: "#3a3860" }}>\u00b7</span>
-              <input value={liveCard.title || ""} onChange={e => updateCard({ title: e.target.value })} placeholder="Title" style={{ background: "transparent", border: "none", color: "#8a85a0", fontSize: "13px", outline: "none", minWidth: "80px", maxWidth: "200px" }} />
+              <input
+                value={liveCard.company || ""}
+                onChange={e => updateCard({ company: e.target.value })}
+                onClick={e => e.stopPropagation()}
+                onMouseDown={e => e.stopPropagation()}
+                placeholder="Company"
+                style={{ background: "transparent", border: "none", color: "#e8e6f0", fontSize: "15px", fontWeight: 700, outline: "none", minWidth: "80px", maxWidth: "160px" }}
+              />
+              <span style={{ color: "#3a3860" }}>·</span>
+              <input
+                value={liveCard.title || ""}
+                onChange={e => updateCard({ title: e.target.value })}
+                onClick={e => e.stopPropagation()}
+                onMouseDown={e => e.stopPropagation()}
+                placeholder="Title"
+                style={{ background: "transparent", border: "none", color: "#8a85a0", fontSize: "13px", outline: "none", minWidth: "80px", maxWidth: "200px" }}
+              />
               {liveCard.jdUrl && <a href={liveCard.jdUrl} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#c9a84c", textDecoration: "none", flexShrink: 0 }}>Post</a>}
             </div>
             <div style={{ display: "flex", gap: "4px", marginTop: "8px", overflowX: "auto", paddingBottom: "2px" }}>
@@ -2594,7 +2703,26 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
       </div>
       {hasSent && showSent && <WhatYouSent card={liveCard} onClose={() => setShowSent(false)} />}
       <div style={{ padding: "8px 20px", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
-        <textarea value={jd} onChange={e => setJd(e.target.value)} rows={2} placeholder="Paste job description here... (URL auto-detected)" style={{ ...S.input, width: "100%", fontSize: "11px", resize: "vertical" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+          <span style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
+            Job Description{jd ? ` (${jd.length.toLocaleString()} chars)` : ""}
+          </span>
+          {jd && (
+            <button
+              onClick={() => setJdExpanded(v => !v)}
+              style={{ background: "none", border: "none", color: "#c9a84c", fontSize: "10px", cursor: "pointer", padding: 0 }}
+            >
+              {jdExpanded ? "Collapse" : "View Full JD"}
+            </button>
+          )}
+        </div>
+        <textarea
+          value={jd}
+          onChange={e => setJd(e.target.value)}
+          rows={jdExpanded ? 14 : 2}
+          placeholder="Paste job description here... (URL auto-detected)"
+          style={{ ...S.input, width: "100%", fontSize: "11px", resize: "vertical" }}
+        />
       </div>
       <div style={{ display: "flex", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
         {TABS.map(t => (
@@ -2602,8 +2730,8 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
         ))}
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} onSaveToCard={onSaveResume} />}
-        {activeTab === "cover"    && <CoverLetterTab profile={profile} card={liveCard} jd={jd} onSaveToCard={onSaveCoverLetter} />}
+        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveResume} />}
+        {activeTab === "cover"    && <CoverLetterTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveCoverLetter} />}
         {activeTab === "prep"     && <InterviewPrepTab profile={profile} card={liveCard} jd={jd} stories={stories} onUpdateCard={updateCard} onUpdateProfile={p => setProfileFromWorkspace(p)} />}
         {activeTab === "research" && <ResearchTab profile={profile} card={liveCard} />}
       </div>
@@ -2619,7 +2747,7 @@ function DrawerNav({ active, onChange, onClose, user }) {
   const items = [
     { id: "dashboard", icon: "\u229e", label: "Dashboard" },
     { id: "tracker",   icon: "\u2B21", label: "Tracker" },
-    { id: "analyze",   icon: "\u2726", label: "Fit Check" },
+    { id: "analyze",   icon: "\u2726", label: "Analyze Fit" },
     { id: "stories",   icon: "\u25C8", label: "Stories" },
     { id: "prep",      icon: "\u25CE", label: "Interview Prep" },
     { id: "profile",   icon: "\u25C9", label: "Profile" },
@@ -2667,7 +2795,7 @@ function CoachingNudge({ cards: cardsProp, stories: storiesProp, profile }) {
   const fetched = useRef(false);
 
   useEffect(() => {
-    if (fetched.current || !ANTHROPIC_API_KEY) return;
+    if (fetched.current) return;
     fetched.current = true;
     const t = setTimeout(async () => {
       setLoading(true);

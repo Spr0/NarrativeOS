@@ -60,6 +60,37 @@ const RESEARCH_STEPS = [
   { key: "leadership",     label: "Leadership & org structure",             query: c => `${c} executive leadership team CEO CTO VP org structure 2025` },
   { key: "financials",     label: "Financial health & stability",           query: c => `${c} financial results revenue growth funding stability 2024 2025` },
   { key: "transformation", label: "Transformation & strategic initiatives", query: c => `${c} digital transformation technology strategy initiatives 2024 2025` },
+  {
+    key: "comp",
+    label: "Compensation range",
+    // Custom runner: check the JD first for a stated comp range, fall back to
+    // a targeted web search (Levels.fyi, Glassdoor, LinkedIn).
+    runner: async (company, jd, role) => {
+      if (jd && /\$[\d,]|\bsalary\b|\bcompensation\b|\bbase\s*pay\b|\bOTE\b|\btotal\s*comp/i.test(jd)) {
+        try {
+          const extracted = await callClaude(
+            "You are a compensation analyst. Extract any stated salary, total comp, base, bonus, equity, pay range, or benefit details from the job description below. Return 2-4 concise sentences with numbers. If NO comp information is stated, respond exactly: NOT_IN_JD",
+            `Job Description:\n${(jd || "").slice(0, 4000)}`,
+            350
+          );
+          if (extracted && !/NOT_IN_JD/i.test(extracted)) {
+            return `FROM JOB DESCRIPTION:\n${extracted.trim()}`;
+          }
+        } catch {}
+      }
+      const q = `${company} ${role || ""} salary compensation range base pay total comp Levels.fyi Glassdoor LinkedIn 2024 2025`.trim();
+      return callClaudeSearch(company, q);
+    },
+  },
+  {
+    key: "hiringManager",
+    label: "Likely hiring manager",
+    // Best-effort web lookup for the probable hiring manager.
+    runner: async (company, jd, role) => {
+      const q = `${company} ${role || ""} hiring manager VP director head of team lead LinkedIn 2025 who would this role report to`.trim();
+      return callClaudeSearch(company, q);
+    },
+  },
 ];
 
 const OPTIONAL_STEPS = [
@@ -76,6 +107,69 @@ function tierContext(profile) {
     executive: { voice: "Boardroom-level, concise, commercially framed. No hand-holding.", scope: "Focus on P&L ownership, organizational transformation, C-suite and board relationships, and enterprise outcomes.", expectations: "Expect VP+ scope. Full P&L, revenue accountability, and multi-year transformation programs are baseline.", questions: "Interview questions should probe strategic vision, enterprise risk, talent philosophy, and financial stewardship." },
   };
   return map[tier] || map.senior;
+}
+
+// ─── Profile completeness ─────────────────────────────────────────────────────
+// Weighted scoring so that the highest-leverage fields (Positioning
+// Intelligence, resume text, stories) dominate. Returns { score: 0-100,
+// missing: [{ label, key, weight, cta }] } for rendering a meter + checklist.
+function computeProfileCompleteness(profile, stories) {
+  const items = [
+    { key: "name",         label: "Full name",              weight: 5,  done: !!(profile?.name || "").trim() },
+    { key: "email",        label: "Email",                  weight: 5,  done: !!(profile?.email || "").trim() },
+    { key: "phone",        label: "Phone",                  weight: 3,  done: !!(profile?.phone || "").trim() },
+    { key: "linkedin",     label: "LinkedIn URL",           weight: 2,  done: !!(profile?.linkedin || "").trim() },
+    { key: "background",   label: "Professional summary",   weight: 10, done: ((profile?.background || "").trim().length >= 40) },
+    { key: "prepContext",  label: "Positioning Intelligence", weight: 15, done: ((profile?.prepContext || "").trim().length >= 80) },
+    { key: "resumeText",   label: "Resume uploaded",        weight: 25, done: !!(profile?.resumeText || "").trim() && !!profile?.resumeUploaded },
+    { key: "variants",     label: "At least 1 resume variant", weight: 5, done: Array.isArray(profile?.resumeVariants) && profile.resumeVariants.length > 0 },
+    { key: "stories",      label: "3+ STAR stories",        weight: 20, done: Array.isArray(stories) && stories.length >= 3 },
+    { key: "verified",     label: "Verified skills / corrections", weight: 10, done: Array.isArray(profile?.verifiedSkills) && profile.verifiedSkills.length > 0 },
+  ];
+  const total   = items.reduce((a, i) => a + i.weight, 0);
+  const earned  = items.filter(i => i.done).reduce((a, i) => a + i.weight, 0);
+  const score   = Math.round((earned / total) * 100);
+  const missing = items.filter(i => !i.done);
+  return { score, missing, items };
+}
+
+// ─── Pipeline velocity ────────────────────────────────────────────────────────
+// Computes per-card timing stats from stageHistory[]. Returns an object with
+// aggregate stats for the dashboard velocity strip plus per-card diagnostics.
+function parseDateStr(str) {
+  // getToday() produces "Month DD, YYYY" which Date.parse handles natively.
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function daysBetween(a, b) {
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function computePipelineStats(cards) {
+  const now = new Date();
+  const active = (Array.isArray(cards) ? cards : []).filter(c => c.stage !== "Rejected" && c.stage !== "Considering");
+  const stalled = [];
+  let totalDaysActive = 0;
+  let counted = 0;
+
+  for (const c of active) {
+    const history = Array.isArray(c.stageHistory) ? c.stageHistory : [];
+    // Days in current stage = now - last stage transition
+    const last = history.length > 0 ? parseDateStr(history[history.length - 1].at) : parseDateStr(c.createdAt);
+    const daysInStage = last ? daysBetween(last, now) : 0;
+    // Total days since first activity
+    const first = history.length > 0 ? parseDateStr(history[0].at) : parseDateStr(c.createdAt);
+    const daysTotal = first ? daysBetween(first, now) : 0;
+    totalDaysActive += daysTotal;
+    counted++;
+    if (daysInStage >= 14) stalled.push({ card: c, daysInStage });
+  }
+
+  stalled.sort((a, b) => b.daysInStage - a.daysInStage);
+  const avgDaysActive = counted > 0 ? Math.round(totalDaysActive / counted) : 0;
+  return { active: active.length, avgDaysActive, stalled };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -622,6 +716,26 @@ Stage: ${card.stage || "unknown"}
 ${typeInstructions[type] || typeInstructions["thank-you"]}
 RULES: Subject line on first line prefixed "Subject: ". Blank line. Email body. No placeholders. No closing signature block.`;
   },
+
+  gmailParse: () =>
+    `You are screening emails for an executive job seeker to identify recruiter outreach.
+
+Given an email's From address, Subject line, and body snippet, determine if this is recruiter or hiring-related communication.
+
+A RECRUITER EMAIL includes: specific job role or opportunity mention, recruiter or hiring manager outreach, interview scheduling, application status update, networking for a role.
+NOT a recruiter email: product newsletters, billing, automated service alerts, generic marketing, personal correspondence unrelated to jobs.
+
+Return ONLY a valid JSON object — no markdown, no code fences:
+{
+  "isRecruiter": <true or false>,
+  "company": "<company the role is at, or empty string>",
+  "role": "<job title mentioned, or empty string>",
+  "stage": "<one of: Considering, Applied, Screening, Hiring Manager, Panel, Exec, Rejected>",
+  "action": "<one of: respond, schedule, review, none>",
+  "sentiment": "<one of: positive, neutral, rejection>",
+  "summary": "<one concise sentence — what this email is asking or telling the candidate>"
+}
+If isRecruiter is false, all other fields may be empty strings.`,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -845,6 +959,105 @@ function clearDriveToken(userKey) {
   localStorage.removeItem("cf:google_token:drive");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 5b. GMAIL INTEGRATION
+// OAuth implicit flow — token stored in localStorage, never sent to our server.
+// Scopes: gmail.readonly only. Token expires in 1 hour; expiry is handled
+// gracefully by clearing the stored token and showing "reconnect" UI.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getGmailToken(userKey) {
+  const scoped = userKey ? localStorage.getItem(`${userKey}:google_token:gmail`) : null;
+  const legacy = localStorage.getItem("nos_gmail_token");
+  if (legacy && userKey && !scoped) {
+    localStorage.setItem(`${userKey}:google_token:gmail`, legacy);
+    localStorage.removeItem("nos_gmail_token");
+  }
+  return userKey
+    ? localStorage.getItem(`${userKey}:google_token:gmail`)
+    : localStorage.getItem("nos_gmail_token");
+}
+
+function setGmailToken(userKey, token) {
+  if (userKey) localStorage.setItem(`${userKey}:google_token:gmail`, token);
+  else localStorage.setItem("nos_gmail_token", token);
+}
+
+function clearGmailToken(userKey) {
+  if (userKey) localStorage.removeItem(`${userKey}:google_token:gmail`);
+  localStorage.removeItem("nos_gmail_token");
+}
+
+// Redirect to Google OAuth implicit flow. On return the URL hash contains
+// access_token=... and state=gmail_oauth — the NarrativeOS main component
+// catches this on mount, stores the token, and routes to the Gmail tab.
+// Requires VITE_GOOGLE_CLIENT_ID in Netlify environment variables, and the
+// app's Netlify URL registered as an authorized redirect URI in Google Cloud.
+function initiateGmailOAuth() {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+  if (!clientId) {
+    alert("Set VITE_GOOGLE_CLIENT_ID in Netlify environment variables to enable Gmail.");
+    return;
+  }
+  const redirectUri = encodeURIComponent(
+    window.location.origin + window.location.pathname.replace(/\/$/, "")
+  );
+  const scope = encodeURIComponent("https://www.googleapis.com/auth/gmail.readonly");
+  window.location.href =
+    `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}` +
+    `&redirect_uri=${redirectUri}&response_type=token&scope=${scope}` +
+    `&state=gmail_oauth&prompt=consent&access_type=online`;
+}
+
+// Decode base64url strings used in Gmail API message bodies.
+function _decodeBase64Url(str) {
+  try { return atob(str.replace(/-/g, "+").replace(/_/g, "/")); } catch { return ""; }
+}
+
+// Recursively find the first text/plain part in a Gmail MIME payload.
+function _extractPlainText(payload) {
+  if (!payload) return "";
+  if (payload.mimeType === "text/plain" && payload.body?.data) {
+    return _decodeBase64Url(payload.body.data);
+  }
+  if (Array.isArray(payload.parts)) {
+    for (const part of payload.parts) {
+      const t = _extractPlainText(part);
+      if (t) return t;
+    }
+  }
+  return "";
+}
+
+function _getHeader(headers, name) {
+  return (headers || []).find(h => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+}
+
+// List message IDs matching a Gmail search query.
+async function gmailListMessages(token, query, maxResults = 40) {
+  const q = encodeURIComponent(query);
+  const res = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${q}&maxResults=${maxResults}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.status === 401) throw new Error("GMAIL_EXPIRED");
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || "Gmail API error");
+  return data.messages || [];
+}
+
+// Fetch full details for a single message.
+async function gmailGetMessage(token, id) {
+  const res = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (res.status === 401) throw new Error("GMAIL_EXPIRED");
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || "Gmail API error");
+  return data;
+}
+
 async function getOrCreateDriveFolder(token, folderName = DRIVE_FOLDER_NAME) {
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
@@ -1035,6 +1248,66 @@ ${stripPreIntelRoles(baseResume)}`;
     `${factLock}\n\nApproved Strategy:\n${strategy}\n\nJob Description:\n${jd}`,
     2700
   );
+}
+
+// ─── Corrections export ───────────────────────────────────────────────────────
+// Builds a portable DOCX listing all verified skills from the profile and all
+// per-card gap corrections — a "here's what I've already addressed" reference.
+async function buildCorrectionsDocx(profile, cards) {
+  const lib = await getDocxLib();
+  const { Document, Packer, Paragraph, TextRun } = lib;
+  const skills = Array.isArray(profile?.verifiedSkills) ? profile.verifiedSkills : [];
+  const allCards = Array.isArray(cards) ? cards : [];
+  const cardsWithCorrections = allCards.filter(c => Array.isArray(c.corrections) && c.corrections.length > 0);
+
+  const children = [];
+  children.push(new Paragraph({ children: [new TextRun({ text: "GAP CORRECTIONS & VERIFIED SKILLS", bold: true, size: 28 })], spacing: { after: 200 } }));
+  children.push(new Paragraph({ children: [new TextRun({ text: `${profile?.name || "Candidate"} — Exported ${getToday()}`, size: 20, color: "666666" })], spacing: { after: 300 } }));
+
+  // Section 1: Verified Skills
+  if (skills.length > 0) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "VERIFIED SKILLS", bold: true, size: 24 })], spacing: { before: 200, after: 100 } }));
+    children.push(new Paragraph({ children: [new TextRun({ text: "Skills confirmed through gap corrections — pre-addressed in all future resumes, briefs, and fit checks.", size: 18, italics: true, color: "888888" })], spacing: { after: 150 } }));
+    for (const s of skills) {
+      children.push(new Paragraph({
+        children: [
+          new TextRun({ text: `${s.skill}`, bold: true, size: 20 }),
+          new TextRun({ text: ` (referenced ${s.count || 1}x${s.firstSeenAt ? `, since ${s.firstSeenAt}` : ""})`, size: 18, color: "888888" }),
+        ],
+        spacing: { after: 40 },
+      }));
+      children.push(new Paragraph({ children: [new TextRun({ text: s.context || "", size: 18 })], spacing: { after: 120 }, indent: { left: 360 } }));
+    }
+  }
+
+  // Section 2: Per-card corrections
+  if (cardsWithCorrections.length > 0) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "CARD-LEVEL CORRECTIONS", bold: true, size: 24 })], spacing: { before: 300, after: 100 } }));
+    for (const card of cardsWithCorrections) {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `${card.company || "Untitled"}${card.title ? ` — ${card.title}` : ""}`, bold: true, size: 20, color: "C9A84C" })],
+        spacing: { before: 200, after: 80 },
+      }));
+      for (const c of card.corrections) {
+        children.push(new Paragraph({
+          children: [
+            new TextRun({ text: `${c.gapTitle || "Gap"}`, bold: true, size: 18 }),
+            new TextRun({ text: c.verifiedAt ? ` (verified ${c.verifiedAt})` : "", size: 16, color: "888888" }),
+          ],
+          spacing: { after: 30 },
+          indent: { left: 360 },
+        }));
+        children.push(new Paragraph({ children: [new TextRun({ text: c.explanation || "", size: 18 })], spacing: { after: 100 }, indent: { left: 720 } }));
+      }
+    }
+  }
+
+  if (skills.length === 0 && cardsWithCorrections.length === 0) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "No corrections or verified skills recorded yet.", size: 20, color: "888888" })], spacing: { before: 200 } }));
+  }
+
+  const doc = new Document({ sections: [{ properties: {}, children }] });
+  return await Packer.toBlob(doc);
 }
 
 async function buildPrepBriefDocx(prepData, profile) {
@@ -1598,8 +1871,15 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
 
 function RoleCard({ card, onClick }) {
   const sc = STAGE_COLORS[card.stage] || STAGE_COLORS.Considering;
+  const followUps = Array.isArray(card.followUps) ? card.followUps : [];
+  const lastFu = followUps.length > 0 ? followUps[followUps.length - 1] : null;
   return (
-    <div onClick={() => onClick(card)} style={{ background: "rgba(20,20,35,0.7)", border: `1px solid ${sc.border}`, borderRadius: "8px", padding: "14px 16px", marginBottom: "10px", cursor: "pointer", transition: "border-color 0.2s" }}>
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.setData("text/plain", card.id); e.dataTransfer.effectAllowed = "move"; }}
+      onClick={() => onClick(card)}
+      style={{ background: "rgba(20,20,35,0.7)", border: `1px solid ${sc.border}`, borderRadius: "8px", padding: "14px 16px", marginBottom: "10px", cursor: "grab", transition: "border-color 0.2s" }}
+    >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
         <div style={{ fontWeight: 600, fontSize: "14px", color: "#e8e6f0", lineHeight: 1.3, flex: 1, paddingRight: "8px" }}>{card.company || "New Role"}</div>
         <StagePill stage={card.stage} small />
@@ -1609,6 +1889,7 @@ function RoleCard({ card, onClick }) {
         {card.jdUrl && <a href={card.jdUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "10px", color: "#c9a84c", textDecoration: "none" }}>Post</a>}
         {card.resumeText && <span style={{ fontSize: "10px", color: "#4ade80", background: "rgba(74,222,128,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Resume</span>}
         {card.coverLetterText && <span style={{ fontSize: "10px", color: "#2dd4bf", background: "rgba(20,184,166,0.08)", borderRadius: "3px", padding: "1px 5px" }}>Cover</span>}
+        {lastFu && <span style={{ fontSize: "10px", color: "#6a6880", background: "rgba(255,255,255,0.03)", borderRadius: "3px", padding: "1px 5px" }}>{lastFu.type} {lastFu.date}</span>}
       </div>
     </div>
   );
@@ -1633,15 +1914,25 @@ function PipelineStatsStrip({ cards: cardsProp }) {
   );
 }
 
-function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
+function Board({ cards: cardsProp, onCardClick, onAddCard, onExport, onMoveCard }) {
   const cards = Array.isArray(cardsProp) ? cardsProp : [];
   const grouped = STAGES.reduce((acc, s) => { acc[s] = cards.filter(c => c.stage === s); return acc; }, {});
   const hasCards = cards.length > 0;
+  const [dragOverStage, setDragOverStage] = useState(null);
+
+  function handleDrop(e, stage) {
+    e.preventDefault();
+    setDragOverStage(null);
+    const id = e.dataTransfer.getData("text/plain");
+    if (!id || !onMoveCard) return;
+    onMoveCard(id, stage);
+  }
+
   return (
     <div>
       <PipelineStatsStrip cards={cards} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-        <div style={{ fontSize: "11px", color: "#3a3860" }}>{cards.length} role{cards.length !== 1 ? "s" : ""} tracked</div>
+        <div style={{ fontSize: "11px", color: "#3a3860" }}>{cards.length} role{cards.length !== 1 ? "s" : ""} tracked &middot; <span style={{ color: "#4a4860" }}>drag cards to change stage</span></div>
         <div style={{ display: "flex", gap: "8px" }}>
           {hasCards && <button onClick={onExport} style={{ ...S.btnGhost, fontSize: "11px", padding: "5px 12px" }}>Export CSV</button>}
           <button onClick={onAddCard} style={{ ...S.btn, fontSize: "12px", padding: "6px 14px" }}>+ Add Role</button>
@@ -1660,9 +1951,25 @@ function Board({ cards: cardsProp, onCardClick, onAddCard, onExport }) {
           <div style={{ display: "flex", gap: "12px", minWidth: `${STAGES.length * 190}px` }}>
             {STAGES.map(stage => {
               const sc = STAGE_COLORS[stage];
+              const isOver = dragOverStage === stage;
               return (
-                <div key={stage} style={{ flex: "0 0 180px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <div
+                  key={stage}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dragOverStage !== stage) setDragOverStage(stage); }}
+                  onDragLeave={() => setDragOverStage(null)}
+                  onDrop={e => handleDrop(e, stage)}
+                  style={{
+                    flex: "0 0 180px",
+                    minHeight: "120px",
+                    padding: "4px",
+                    borderRadius: "8px",
+                    background: isOver ? `${sc.bg}` : "transparent",
+                    outline: isOver ? `2px dashed ${sc.border}` : "2px dashed transparent",
+                    outlineOffset: "-2px",
+                    transition: "background 0.15s, outline-color 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", padding: "0 4px" }}>
                     <span style={{ fontSize: "10px", fontWeight: 700, color: sc.text, letterSpacing: "0.08em", textTransform: "uppercase" }}>{stage}</span>
                     <span style={{ fontSize: "10px", color: "#4a4860", background: "rgba(255,255,255,0.05)", borderRadius: "10px", padding: "1px 6px" }}>{grouped[stage].length}</span>
                   </div>
@@ -1692,7 +1999,7 @@ function resumeFilename(profile, company) {
 // RESUME TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResumeTab({ profile, card, jd, stories = [], onSaveToCard }) {
+function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant }) {
   const [resumeType, setResumeType] = useState(card?.resumeType || "chronological");
   const [strategy, setStrategy] = useState("");
   const [finalResume, setFinalResume] = useState(card?.resumeText || "");
@@ -1706,6 +2013,7 @@ function ResumeTab({ profile, card, jd, stories = [], onSaveToCard }) {
   const [refining, setRefining] = useState(false);
   const [companyOverride, setCompanyOverride] = useState("");
   const [showCompanyInput, setShowCompanyInput] = useState(false);
+  const [variantSaved, setVariantSaved] = useState(false);
 
   const baseResume = getActiveResume(profile);
   const company = card?.company || "";
@@ -1766,6 +2074,26 @@ Omission is always safer than invention.`,
     setRefining(false);
   }
 
+  // Auto-name a variant from the target context. Fallbacks keep the label
+  // readable even when company or role is missing.
+  function suggestVariantName() {
+    const r = (role || "").trim();
+    const c = (effectiveCompany || "").trim();
+    const t = (RESUME_TYPES.find(x => x.id === resumeType)?.label || "Resume").replace(/\s+/g, " ").trim();
+    if (r && c) return `${r} — ${c}`;
+    if (r)      return `${r} (${t})`;
+    if (c)      return `${t} — ${c}`;
+    return `${t} — ${getToday()}`;
+  }
+
+  function saveAsVariant() {
+    if (!finalResume || !onAddVariant) return;
+    const name = suggestVariantName();
+    onAddVariant({ name, text: finalResume });
+    setVariantSaved(true);
+    setTimeout(() => setVariantSaved(false), 2500);
+  }
+
   return (
     <div style={S.tab}>
       <div style={S.label}>Resume Format</div>
@@ -1820,6 +2148,15 @@ Omission is always safer than invention.`,
             <div style={S.label}>Final Resume</div>
             <div style={{ display: "flex", gap: "8px" }}>
               <CopyBtn text={finalResume} />
+              {onAddVariant && (
+                <button
+                  onClick={saveAsVariant}
+                  title={`Save as "${suggestVariantName()}"`}
+                  style={{ ...S.btnGhost, color: variantSaved ? "#4ade80" : "#8880b8", borderColor: variantSaved ? "#4ade80" : undefined }}
+                >
+                  {variantSaved ? "\u2713 Saved" : "+ Variant"}
+                </button>
+              )}
               {blob && <SaveToDriveBtn blob={blob} filename={`${resumeFilename(profile, effectiveCompany)}.docx`} onSaved={() => setSaved(true)} disabled={!driveToken} folderName={RESUMES_FOLDER_NAME} userEmail={profile.email} />}
               {blob && (
                 <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.docx`; a.click(); }} style={S.btnGhost}>DOCX</button>
@@ -2130,13 +2467,16 @@ function BriefView({ data }) {
 }
 
 function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdateProfile }) {
-  const [prepData, setPrepData] = useState(null);
+  const [prepData, setPrepData] = useState(card?.prepData || null);
   const [rawText, setRawText]   = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
-  const [depth, setDepth]       = useState("recruiter");
+  const [depth, setDepth]       = useState(card?.prepDepth || "recruiter");
   const [blob, setBlob]         = useState(null);
   const [pdfBlob, setPdfBlob]   = useState(null);
+  const [savedToCard, setSavedToCard] = useState(!!card?.prepData);
+  const [feedback, setFeedback] = useState("");
+  const [refining, setRefining] = useState(false);
   const driveToken = getDriveToken(profile.email);
   const [showGapPanel, setShowGapPanel] = useState(false);
   const [gapForm, setGapForm] = useState({ skill: "", context: "" });
@@ -2203,11 +2543,11 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
   async function run() {
     const base = getActiveResume(profile);
     if (!base && !jd) { setError("Add a resume or JD first."); return; }
-    setLoading(true); setError(""); setPrepData(null); setRawText(""); setBlob(null); setPdfBlob(null);
+    setLoading(true); setError(""); setPrepData(null); setRawText(""); setBlob(null); setPdfBlob(null); setSavedToCard(false);
     try {
       const raw = await callClaude(
         PROMPTS.interviewPrep(profile, stories, depth),
-        `Company: ${company}\nRole: ${role}\nJD:\n${jd || "(none)"}\nResume:\n${(base || "").slice(0, 1400)}`,
+        `Company: ${company}\nRole: ${role}\nJD:\n${jd || "(none)"}\nResume:\n${(base || "").slice(0, 3500)}`,
         2400
       );
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
@@ -2221,9 +2561,86 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
       setBlob(db);
       const pb = await buildPdfBlob(txt);
       setPdfBlob(pb);
+      // Persist prep to card so it survives a session reload.
+      if (onUpdateCard) {
+        onUpdateCard({ prepData: parsed, prepDepth: depth, prepGeneratedAt: getToday() });
+        setSavedToCard(true);
+      }
     } catch (e) { setError(String(e)); }
     setLoading(false);
   }
+
+  // Refine an existing brief. We send the current brief as JSON along with the
+  // user's feedback. The model must return the SAME JSON shape (the prompt
+  // enforces this) — we parse it back, re-render blobs, and persist.
+  // FACT LOCK applies: no new metrics may be invented — corrections + stories
+  // + positioning context already feed the initial run.
+  async function refine() {
+    if (!feedback.trim() || !prepData) return;
+    setRefining(true);
+    try {
+      const system = `You are refining an interview prep brief. The brief is a JSON object. Apply the user's feedback precisely. Maintain the exact JSON schema — all the same keys, same nesting, same array shapes. Adjust wording, reframe points, tighten copy, swap examples among the stories and facts already referenced.
+
+FACT LOCK — HARD CONSTRAINT:
+Every metric, company name, title, date, and quantified result in the output must already exist in the CURRENT BRIEF below or be logically inferrable from the candidate's resume + stories. Do NOT invent new facts, numbers, or achievements. If the feedback asks for a metric that is not available, reframe qualitatively.
+
+Return ONLY the revised JSON object. No markdown. No commentary. No code fences.`;
+      const user = `CURRENT BRIEF (JSON — source of truth):\n${JSON.stringify(prepData, null, 2)}\n\nFEEDBACK TO APPLY:\n${feedback}`;
+      const raw = await callClaude(system, user, 2400);
+      const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("Refine response was not valid JSON. Try again.");
+      const parsed = JSON.parse(jsonMatch[0]);
+      setPrepData(parsed);
+      const txt = prepToText(parsed);
+      setRawText(txt);
+      const db = await buildPrepBriefDocx(parsed, profile);
+      setBlob(db);
+      const pb = await buildPdfBlob(txt);
+      setPdfBlob(pb);
+      setFeedback("");
+      if (onUpdateCard) {
+        onUpdateCard({ prepData: parsed, prepDepth: depth, prepGeneratedAt: getToday() });
+        setSavedToCard(true);
+      }
+    } catch (e) { setError(String(e)); }
+    setRefining(false);
+  }
+
+  // On mount (or when switching cards that already have saved prep), sync the
+  // local state from the card and rebuild the DOCX + PDF blobs + raw text so
+  // the user can re-download without re-running the call.
+  useEffect(() => {
+    if (!card?.prepData) {
+      // Card has no saved prep — reset local state.
+      setPrepData(null);
+      setRawText("");
+      setBlob(null);
+      setPdfBlob(null);
+      setSavedToCard(false);
+      if (card?.prepDepth) setDepth(card.prepDepth);
+      return;
+    }
+    // Card has saved prep — hydrate local state.
+    setPrepData(card.prepData);
+    setSavedToCard(true);
+    if (card.prepDepth) setDepth(card.prepDepth);
+    let cancelled = false;
+    (async () => {
+      try {
+        const txt = prepToText(card.prepData);
+        if (cancelled) return;
+        setRawText(txt);
+        const db = await buildPrepBriefDocx(card.prepData, profile);
+        if (cancelled) return;
+        setBlob(db);
+        const pb = await buildPdfBlob(txt);
+        if (cancelled) return;
+        setPdfBlob(pb);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [card?.id]);
 
   const depthLabels = { recruiter: "Recruiter Screen", behavioral: "Behavioral", technical: "Technical/Deep", executive: "Executive" };
   const filename = `Brief_${company || "Draft"}_${depthLabels[depth] || depth}`;
@@ -2248,9 +2665,32 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
             {blob && <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${filename}.docx`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 12px" }}>DOCX</button>}
             {pdfBlob && <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${filename}.pdf`; a.click(); }} style={{ ...S.btnGhost, fontSize: "11px", padding: "4px 12px" }}>PDF</button>}
             {blob && <SaveToDriveBtn blob={blob} filename={`${filename}.docx`} onSaved={() => {}} disabled={!driveToken} userEmail={profile.email} />}
+            {savedToCard && <span style={{ fontSize: "10px", color: "#4ade80", fontWeight: 600 }}>&#10003; Saved to role</span>}
             <div style={{ marginLeft: "auto" }}><CopyBtn text={rawText} /></div>
           </div>
           <BriefView data={prepData} />
+          <div style={{ marginTop: "18px", background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, color: "#c9a84c", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Refine Brief</div>
+            <div style={{ fontSize: "11px", color: "#6a6880", marginBottom: "10px", lineHeight: 1.5 }}>
+              Apply targeted edits without regenerating from scratch. FACT LOCK is enforced — no new metrics invented.
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !refining && feedback.trim() && refine()}
+                placeholder="e.g. Lead with the AI governance story, soften the comp frame, add a question about team structure..."
+                style={{ ...S.input, flex: 1, fontSize: "12px" }}
+              />
+              <button
+                onClick={refine}
+                disabled={refining || !feedback.trim()}
+                style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: refining || !feedback.trim() ? 0.5 : 1 }}
+              >
+                {refining ? <Spinner size={12} /> : "Apply"}
+              </button>
+            </div>
+          </div>
         </>
       )}
       {!prepData && !loading && (
@@ -2312,18 +2752,43 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
 // RESEARCH TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResearchTab({ profile, card }) {
+function ResearchTab({ profile, card, jd, onUpdateCard }) {
   const company = card?.company || "";
-  const [results, setResults] = useState({});
+  const role    = card?.title   || "";
+  // Hydrate from persisted research on the card so results survive session
+  // reload and closing the workspace. Defensive fallback for older cards
+  // that predate this field.
+  const [results, setResults] = useState(card?.research || {});
   const [loading, setLoading] = useState({});
   const [error, setError] = useState("");
+  const [lastRunAt, setLastRunAt] = useState(card?.researchRunAt || "");
+
+  // If the user switches to a different card, reset local state from that
+  // card's saved research.
+  useEffect(() => {
+    setResults(card?.research || {});
+    setLastRunAt(card?.researchRunAt || "");
+  }, [card?.id]);
+
+  function persist(updatedResults) {
+    if (!onUpdateCard) return;
+    const stamp = getToday();
+    setLastRunAt(stamp);
+    onUpdateCard({ research: updatedResults, researchRunAt: stamp });
+  }
 
   async function runStep(step) {
     if (!company) { setError("No company set on this role card."); return; }
     setLoading(p => ({ ...p, [step.key]: true })); setError("");
     try {
-      const r = await callClaudeSearch(company, step.query(company));
-      setResults(p => ({ ...p, [step.key]: r }));
+      const r = typeof step.runner === "function"
+        ? await step.runner(company, jd, role)
+        : await callClaudeSearch(company, step.query(company));
+      setResults(p => {
+        const next = { ...p, [step.key]: r };
+        persist(next);
+        return next;
+      });
     } catch (e) { setError(String(e)); }
     setLoading(p => ({ ...p, [step.key]: false }));
   }
@@ -2332,7 +2797,15 @@ function ResearchTab({ profile, card }) {
     for (const step of RESEARCH_STEPS) { await runStep(step); }
   }
 
+  function clearAll() {
+    if (!confirm("Clear all saved research for this role?")) return;
+    setResults({});
+    setLastRunAt("");
+    if (onUpdateCard) onUpdateCard({ research: {}, researchRunAt: "" });
+  }
+
   const allSteps = [...RESEARCH_STEPS, ...OPTIONAL_STEPS];
+  const hasAny = Object.keys(results).length > 0;
 
   return (
     <div style={S.tab}>
@@ -2341,10 +2814,22 @@ function ResearchTab({ profile, card }) {
         <div style={{ color: "#4a4860", fontSize: "13px" }}>Set a company name on the role card first.</div>
       ) : (
         <>
-          <div style={{ fontSize: "13px", color: "#8a85a0", marginBottom: "16px" }}>Researching: <strong style={{ color: "#c9a84c" }}>{company}</strong></div>
-          <button onClick={runAll} disabled={Object.values(loading).some(Boolean)} style={{ ...S.btn, marginBottom: "20px", opacity: Object.values(loading).some(Boolean) ? 0.5 : 1 }}>
-            Run All Core Research
-          </button>
+          <div style={{ fontSize: "13px", color: "#8a85a0", marginBottom: "6px" }}>Researching: <strong style={{ color: "#c9a84c" }}>{company}</strong>{role ? <span style={{ color: "#4a4860" }}> &middot; {role}</span> : null}</div>
+          {lastRunAt && (
+            <div style={{ fontSize: "10px", color: "#4a4860", marginBottom: "14px" }}>
+              Last run: {lastRunAt} &middot; saved to this role
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+            <button onClick={runAll} disabled={Object.values(loading).some(Boolean)} style={{ ...S.btn, opacity: Object.values(loading).some(Boolean) ? 0.5 : 1 }}>
+              Run All Core Research
+            </button>
+            {hasAny && (
+              <button onClick={clearAll} style={{ ...S.btnGhost, fontSize: "11px" }}>
+                Clear saved
+              </button>
+            )}
+          </div>
           {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
           {allSteps.map(step => (
             <div key={step.key} style={{ ...S.section, marginBottom: "16px" }}>
@@ -2398,16 +2883,94 @@ function StoryCard({ story, onEdit, onDelete }) {
 
 function StoryEditor({ story, onSave, onCancel }) {
   const [form, setForm] = useState(story || { id: generateId(), hook: "", situation: "", task: "", action: "", result: "", tags: [] });
+  const [aiLoading, setAiLoading] = useState(false);
+  const [tagLoading, setTagLoading] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  // AI Rewrite — rewrites the hook and result to Hankel hybrid-bullet
+  // language (potential+proof, cooperation KPIs, no banned phrases).
+  async function aiRewrite() {
+    const content = [form.situation, form.task, form.action, form.result].filter(Boolean).join("\n");
+    if (!content.trim()) return;
+    setAiLoading(true);
+    try {
+      const raw = await callClaude(
+        `You are a Hankel executive resume coach. The user has a STAR story. Rewrite ONLY the hook and result fields to use the Hankel hybrid-bullet architecture:
+- Lead with a POTENTIAL phrase ("Positioned to," "Poised to," "Prepared to," etc.)
+- Include cooperative context with a stakeholder/team count
+- End with a quantified result and an agreeableness signal
+- Keep the situation, task, and action fields unchanged.
+${_HANKEL_BANNED}
+${_HANKEL_UPGRADE}
+
+Return JSON: { "hook": "...", "result": "..." }. No markdown, no commentary.`,
+        `CURRENT STORY:\nHook: ${form.hook || "(empty)"}\nSituation: ${form.situation}\nTask: ${form.task}\nAction: ${form.action}\nResult: ${form.result}`,
+        400
+      );
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        setForm(f => ({ ...f, hook: parsed.hook || f.hook, result: parsed.result || f.result }));
+      }
+    } catch {}
+    setAiLoading(false);
+  }
+
+  // Auto-tag — asks Claude to identify competency tags from the story content.
+  async function autoTag() {
+    const content = [form.hook, form.situation, form.task, form.action, form.result].filter(Boolean).join("\n");
+    if (!content.trim()) return;
+    setTagLoading(true);
+    try {
+      const raw = await callClaude(
+        `You are a competency tagger for STAR stories. Given the story text, identify 3-6 competency tags from this list (pick only those that clearly match):
+Change Agility, Cross-Functional Fluency, Data Storytelling, Operational Resilience, Team Alignment, Market Adaptability, Outcomes-Based Reporting, AI-Augmented Workflows, Continuous Delivery Mindset, Internal Enablement, Data-Driven Decisions, P&L Ownership, Stakeholder Management, Transformation Leadership, Program Governance, Vendor Management, Risk Mitigation, Strategic Planning, Talent Development, Process Automation, Financial Stewardship, Communication, Executive Presence.
+
+Return JSON: { "tags": ["Tag1", "Tag2", ...] }. No commentary.`,
+        content,
+        200
+      );
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) {
+        const parsed = JSON.parse(m[0]);
+        if (Array.isArray(parsed.tags)) setForm(f => ({ ...f, tags: parsed.tags }));
+      }
+    } catch {}
+    setTagLoading(false);
+  }
+
   return (
     <div style={{ ...S.section, padding: "16px" }}>
-      <div style={{ ...S.label, marginBottom: "14px" }}>{story ? "Edit Story" : "New Story"}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+        <div style={S.label}>{story ? "Edit Story" : "New Story"}</div>
+        <div style={{ display: "flex", gap: "6px" }}>
+          <button onClick={aiRewrite} disabled={aiLoading} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px", opacity: aiLoading ? 0.5 : 1 }}>
+            {aiLoading ? <><Spinner size={10} /> Rewriting...</> : "AI Rewrite"}
+          </button>
+          <button onClick={autoTag} disabled={tagLoading} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px", opacity: tagLoading ? 0.5 : 1 }}>
+            {tagLoading ? <><Spinner size={10} /> Tagging...</> : "Auto-tag"}
+          </button>
+        </div>
+      </div>
       {["hook", "situation", "task", "action", "result"].map(k => (
         <div key={k} style={{ marginBottom: "12px" }}>
           <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", marginBottom: "4px" }}>{k === "hook" ? "Hook (proof+potential bridge)" : k}</div>
           <textarea value={form[k]} onChange={set(k)} rows={k === "hook" ? 2 : 3} style={{ ...S.input, width: "100%", resize: "vertical" }} placeholder={k === "hook" ? "[Achieved X], which positions me to [future capability]" : ""} />
         </div>
       ))}
+      {form.tags?.length > 0 && (
+        <div style={{ marginBottom: "12px", display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {form.tags.map((t, i) => (
+            <span key={i} style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "10px", background: "rgba(192,132,252,0.1)", border: "1px solid rgba(192,132,252,0.3)", color: "#c084fc" }}>
+              {t}
+              <span
+                onClick={() => setForm(f => ({ ...f, tags: f.tags.filter((_, j) => j !== i) }))}
+                style={{ marginLeft: "6px", cursor: "pointer", color: "#8a4060" }}
+              >&#10005;</span>
+            </span>
+          ))}
+        </div>
+      )}
       <div style={{ display: "flex", gap: "8px" }}>
         <button onClick={() => onSave(form)} style={S.btn}>Save</button>
         <button onClick={onCancel} style={S.btnGhost}>Cancel</button>
@@ -2501,10 +3064,12 @@ function ResumeVariantManager({ profile, setProfile }) {
   );
 }
 
-function ProfileTab({ profile, setProfile }) {
+function ProfileTab({ profile, setProfile, stories = [], cards = [] }) {
   const [resumeText, setResumeText] = useState(profile.resumeText || "");
   const [extracting, setExtracting] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
+  const completeness = computeProfileCompleteness(profile, stories);
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
@@ -2542,9 +3107,44 @@ function ProfileTab({ profile, setProfile }) {
     ["address", "Location"], ["linkedin", "LinkedIn URL"], ["website", "Website"],
   ];
 
+  const meterColor = completeness.score >= 80 ? "#4ade80" : completeness.score >= 50 ? "#c9a84c" : "#c06060";
+
   return (
     <div style={S.tab}>
       <div style={S.label}>Profile</div>
+      <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase" }}>Profile Completeness</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: meterColor, lineHeight: 1 }}>{completeness.score}%</div>
+        </div>
+        <div style={{ height: "6px", background: "#1a1830", borderRadius: "3px", overflow: "hidden" }}>
+          <div style={{ width: `${completeness.score}%`, height: "100%", background: meterColor, transition: "width 0.3s ease" }} />
+        </div>
+        {completeness.missing.length > 0 && (
+          <>
+            <button
+              onClick={() => setShowMissing(v => !v)}
+              style={{ marginTop: "10px", background: "none", border: "none", color: "#6a6880", fontSize: "11px", cursor: "pointer", padding: 0, fontFamily: "inherit" }}
+            >
+              {showMissing ? "Hide" : `${completeness.missing.length} item${completeness.missing.length === 1 ? "" : "s"} to complete`}
+            </button>
+            {showMissing && (
+              <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #2a2840" }}>
+                {completeness.missing.map(m => (
+                  <div key={m.key} style={{ fontSize: "11px", color: "#8a85a0", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ color: "#4a4860", fontSize: "9px" }}>&#9711;</span>
+                    <span>{m.label}</span>
+                    <span style={{ marginLeft: "auto", color: "#4a4860", fontSize: "10px" }}>+{m.weight}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {completeness.missing.length === 0 && (
+          <div style={{ marginTop: "8px", fontSize: "11px", color: "#4ade80" }}>&#10003; Fully configured</div>
+        )}
+      </div>
       <div style={{ marginBottom: "20px" }}>
         <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "8px" }}>Career Tier</div>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -2587,6 +3187,30 @@ function ProfileTab({ profile, setProfile }) {
       </button>
       {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>Profile saved</div>}
       <ResumeVariantManager profile={profile} setProfile={setProfile} />
+
+      {(Array.isArray(profile.verifiedSkills) && profile.verifiedSkills.length > 0) || cards.some(c => Array.isArray(c.corrections) && c.corrections.length > 0) ? (
+        <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid #2a2840" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Corrections & Verified Skills</div>
+          <div style={{ fontSize: "11px", color: "#6a6880", marginBottom: "10px", lineHeight: 1.5 }}>
+            {(profile.verifiedSkills || []).length} verified skill{(profile.verifiedSkills || []).length !== 1 ? "s" : ""} &middot; {cards.filter(c => (c.corrections || []).length > 0).length} card{cards.filter(c => (c.corrections || []).length > 0).length !== 1 ? "s" : ""} with corrections
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                const b = await buildCorrectionsDocx(profile, cards);
+                const u = URL.createObjectURL(b);
+                const a = document.createElement("a");
+                a.href = u;
+                a.download = `GapCorrections_${(profile.name || "Candidate").replace(/\s+/g, "_")}.docx`;
+                a.click();
+              } catch (e) { console.error("Corrections export failed:", e); }
+            }}
+            style={{ ...S.btnGhost, fontSize: "11px" }}
+          >
+            Export Corrections (DOCX)
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2625,6 +3249,8 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   const hasSent = liveCard.resumeText || liveCard.coverLetterText;
 
   const [jdExpanded, setJdExpanded] = useState(false);
+  const [showFollowUps, setShowFollowUps] = useState(false);
+  const [fuForm, setFuForm] = useState({ type: "email", notes: "" });
 
   // Keep a ref to onClose so the popstate listener doesn't get a stale closure
   const onCloseRef = useRef(onClose);
@@ -2645,7 +3271,15 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   }, []);
 
   function updateCard(updates) {
-    setCards(prev => prev.map(c => c.id === card.id ? { ...c, ...updates } : c));
+    setCards(prev => prev.map(c => {
+      if (c.id !== card.id) return c;
+      // Track stage transitions with timestamps for pipeline velocity.
+      if (updates.stage && updates.stage !== c.stage) {
+        const history = Array.isArray(c.stageHistory) ? c.stageHistory : [];
+        updates.stageHistory = [...history, { stage: updates.stage, at: getToday() }];
+      }
+      return { ...c, ...updates };
+    }));
   }
 
   useEffect(() => {
@@ -2656,6 +3290,23 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   function onSaveResume(resumeText, resumeType) { updateCard({ resumeText, resumeType }); }
   function setProfileFromWorkspace(updates) { if (setProfile) setProfile(p => ({ ...p, ...updates })); }
   function onSaveCoverLetter(coverLetterText) { updateCard({ coverLetterText }); }
+
+  // Add the refined resume to the profile's variant library with an
+  // auto-suggested name, and activate it. De-dupes if a variant with the same
+  // name already exists (replaces its text rather than creating a duplicate).
+  function onAddVariant({ name, text }) {
+    if (!setProfile || !text) return;
+    setProfile(p => {
+      const variants = Array.isArray(p.resumeVariants) ? [...p.resumeVariants] : [];
+      const existingIdx = variants.findIndex(v => (v.name || "").trim().toLowerCase() === name.trim().toLowerCase());
+      if (existingIdx >= 0) {
+        variants[existingIdx] = { ...variants[existingIdx], text, updatedAt: getToday() };
+        return { ...p, resumeVariants: variants, activeResumeId: variants[existingIdx].id };
+      }
+      const v = { id: generateId(), name, text, createdAt: getToday() };
+      return { ...p, resumeVariants: [...variants, v], activeResumeId: v.id };
+    });
+  }
 
   const TABS = [
     { id: "resume",   label: "Resume" },
@@ -2702,6 +3353,72 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
         </div>
       </div>
       {hasSent && showSent && <WhatYouSent card={liveCard} onClose={() => setShowSent(false)} />}
+      {(() => {
+        const followUps = Array.isArray(liveCard.followUps) ? liveCard.followUps : [];
+        const lastFu = followUps.length > 0 ? followUps[followUps.length - 1] : null;
+        return (
+          <div style={{ padding: "6px 20px", borderBottom: "1px solid #1a1830", flexShrink: 0, background: "rgba(10,10,24,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: "10px", color: "#4a4860", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Follow-ups</span>
+                {lastFu && <span style={{ color: "#6a6880" }}>Last: {lastFu.type} {lastFu.date}</span>}
+                {followUps.length > 0 && <span style={{ color: "#3a3860" }}>({followUps.length})</span>}
+              </div>
+              <button onClick={() => setShowFollowUps(v => !v)} style={{ background: "none", border: "none", color: "#c9a84c", fontSize: "10px", cursor: "pointer", padding: "2px 0" }}>
+                {showFollowUps ? "Hide" : "+ Log"}
+              </button>
+            </div>
+            {showFollowUps && (
+              <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #1a1830" }}>
+                {followUps.length > 0 && (
+                  <div style={{ marginBottom: "8px", maxHeight: "100px", overflowY: "auto" }}>
+                    {[...followUps].reverse().map((fu, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", padding: "3px 0", color: "#8a85a0" }}>
+                        <span>{fu.type} — {fu.notes || "(no notes)"}</span>
+                        <span style={{ color: "#4a4860", fontSize: "10px", flexShrink: 0, marginLeft: "8px" }}>{fu.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                  <select
+                    value={fuForm.type}
+                    onChange={e => setFuForm(f => ({ ...f, type: e.target.value }))}
+                    style={{ ...S.input, fontSize: "11px", padding: "4px 8px", width: "auto", minWidth: "80px" }}
+                  >
+                    {["email", "phone", "linkedin", "in-person", "recruiter", "other"].map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <input
+                    value={fuForm.notes}
+                    onChange={e => setFuForm(f => ({ ...f, notes: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && fuForm.notes.trim()) {
+                        updateCard({ followUps: [...followUps, { id: generateId(), type: fuForm.type, notes: fuForm.notes.trim(), date: getToday() }] });
+                        setFuForm({ type: fuForm.type, notes: "" });
+                      }
+                    }}
+                    placeholder="Brief note — e.g. Sent thank-you email"
+                    style={{ ...S.input, flex: 1, fontSize: "11px", padding: "4px 8px" }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!fuForm.notes.trim()) return;
+                      updateCard({ followUps: [...followUps, { id: generateId(), type: fuForm.type, notes: fuForm.notes.trim(), date: getToday() }] });
+                      setFuForm({ type: fuForm.type, notes: "" });
+                    }}
+                    disabled={!fuForm.notes.trim()}
+                    style={{ ...S.btn, fontSize: "10px", padding: "4px 10px", opacity: fuForm.notes.trim() ? 1 : 0.5 }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       <div style={{ padding: "8px 20px", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
           <span style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
@@ -2730,11 +3447,278 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
         ))}
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveResume} />}
+        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveResume} onAddVariant={onAddVariant} />}
         {activeTab === "cover"    && <CoverLetterTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveCoverLetter} />}
         {activeTab === "prep"     && <InterviewPrepTab profile={profile} card={liveCard} jd={jd} stories={stories} onUpdateCard={updateCard} onUpdateProfile={p => setProfileFromWorkspace(p)} />}
-        {activeTab === "research" && <ResearchTab profile={profile} card={liveCard} />}
+        {activeTab === "research" && <ResearchTab profile={profile} card={liveCard} jd={jd} onUpdateCard={updateCard} />}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GMAIL TAB
+// Scans the connected Gmail inbox for recruiter outreach. Each detected email
+// can be added to the Tracker as a new card or dismissed. Token is an OAuth
+// implicit-flow access token stored in localStorage — expires in ~1 hour.
+// Requires VITE_GOOGLE_CLIENT_ID env var + Netlify URL as authorized redirect.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function GmailTab({ profile, cards, setCards }) {
+  const userEmail = profile?.email || null;
+  const [token, setToken] = useState(() => getGmailToken(userEmail));
+  const [scanning, setScanning] = useState(false);
+  const [emails, setEmails] = useState([]);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("nos_gmail_dismissed") || "[]")); }
+    catch { return new Set(); }
+  });
+  const [error, setError] = useState("");
+  const [scanProgress, setScanProgress] = useState("");
+  const [addedIds, setAddedIds] = useState(new Set());
+
+  function persistDismissed(next) {
+    try { localStorage.setItem("nos_gmail_dismissed", JSON.stringify([...next])); } catch {}
+  }
+
+  function dismiss(id) {
+    setDismissed(prev => {
+      const next = new Set([...prev, id]);
+      persistDismissed(next);
+      return next;
+    });
+  }
+
+  function showAllDismissed() {
+    const empty = new Set();
+    persistDismissed(empty);
+    setDismissed(empty);
+  }
+
+  function disconnect() {
+    clearGmailToken(userEmail);
+    setToken(null);
+    setEmails([]);
+    setError("");
+  }
+
+  // Scan the last 60 days of Gmail for recruiter-signal messages. Fetches up
+  // to 40 IDs via the Gmail search API, then calls Claude on each message body
+  // sequentially (respects the shared API lock). Expired tokens are caught and
+  // the stored token is cleared so the reconnect UI appears automatically.
+  async function scan() {
+    if (!token) return;
+    setScanning(true); setError(""); setEmails([]);
+    try {
+      setScanProgress("Searching inbox...");
+      const query = [
+        "newer_than:60d",
+        "(",
+        "subject:(opportunity OR position OR role OR interview OR application OR",
+        "\"reaching out\" OR \"open to\" OR \"your profile\" OR offer OR recruiter)",
+        "OR from:(recruiter OR talent OR hiring OR careers)",
+        ")",
+      ].join(" ");
+      const ids = await gmailListMessages(token, query, 40);
+      if (ids.length === 0) {
+        setScanProgress(""); setScanning(false); return;
+      }
+      const results = [];
+      for (let i = 0; i < ids.length; i++) {
+        if (dismissed.has(ids[i].id)) continue;
+        setScanProgress(`Analyzing ${i + 1} of ${ids.length}...`);
+        try {
+          const msg = await gmailGetMessage(token, ids[i].id);
+          const headers = msg.payload?.headers || [];
+          const from    = _getHeader(headers, "From");
+          const subject = _getHeader(headers, "Subject");
+          const date    = _getHeader(headers, "Date");
+          const body    = _extractPlainText(msg.payload).slice(0, 1200);
+          const snippet = msg.snippet || "";
+          const emailText = `From: ${from}\nSubject: ${subject}\nDate: ${date}\n\n${body || snippet}`;
+          const raw = await callClaude(PROMPTS.gmailParse(), emailText, 350);
+          const m = raw.match(/\{[\s\S]*?\}/);
+          if (!m) continue;
+          const parsed = JSON.parse(m[0]);
+          if (parsed.isRecruiter) results.push({ id: ids[i].id, from, subject, date, parsed });
+        } catch (e) {
+          if (e.message === "GMAIL_EXPIRED") {
+            clearGmailToken(userEmail); setToken(null);
+            setError("Gmail session expired — reconnect below.");
+            break;
+          }
+          // Skip individual message errors silently.
+        }
+      }
+      setEmails(results);
+    } catch (e) {
+      if (e.message === "GMAIL_EXPIRED") {
+        clearGmailToken(userEmail); setToken(null);
+        setError("Gmail session expired — reconnect below.");
+      } else {
+        setError(e.message || "Scan failed.");
+      }
+    }
+    setScanProgress(""); setScanning(false);
+  }
+
+  function addToTracker(email) {
+    const { company, role, stage } = email.parsed;
+    const existing = cards.find(
+      c => c.company && company &&
+           c.company.toLowerCase() === company.toLowerCase() &&
+           c.stage !== "Rejected"
+    );
+    if (!existing) {
+      const s = stage || "Considering";
+      setCards(prev => [{
+        id: generateId(), company: company || "", title: role || "",
+        stage: s, jd: "", jdUrl: "", tags: [], notes: "",
+        resumeText: "", coverLetterText: "", resumeType: "",
+        corrections: [], followUps: [], createdAt: getToday(),
+        stageHistory: [{ stage: s, at: getToday() }],
+      }, ...prev]);
+    }
+    setAddedIds(prev => new Set([...prev, email.id]));
+  }
+
+  const ACTION_COLORS = {
+    respond:  { bg: "rgba(99,140,255,0.10)",  border: "#4f6ef7", text: "#8aacff" },
+    schedule: { bg: "rgba(74,222,128,0.08)",  border: "#16a34a", text: "#4ade80" },
+    review:   { bg: "rgba(251,191,36,0.08)",  border: "#d97706", text: "#fbbf24" },
+    none:     { bg: "rgba(255,255,255,0.03)", border: "#2a2840", text: "#4a4860" },
+  };
+  const SENTIMENT_COLOR = { positive: "#4ade80", neutral: "#8a85a0", rejection: "#f87171" };
+
+  const visible = emails.filter(e => !dismissed.has(e.id));
+
+  // ── Not connected ────────────────────────────────────────────────────────
+  if (!token) {
+    return (
+      <div style={{ ...S.tab, maxWidth: "500px", margin: "0 auto" }}>
+        <div style={S.label}>Gmail Inbox</div>
+        <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "24px 20px", marginBottom: "16px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700, color: "#c8c4e8", marginBottom: "8px" }}>Detect Recruiter Emails</div>
+          <div style={{ fontSize: "12px", color: "#6a6880", lineHeight: 1.7, marginBottom: "16px" }}>
+            Connect Gmail to surface recruiter outreach, interview requests, and application updates.
+            NarrativeOS reads emails read-only. Email text is sent to Claude for parsing but never stored — only the parsed summary is kept.
+          </div>
+          <div style={{ fontSize: "10px", color: "#4a4860", lineHeight: 1.7, marginBottom: "20px", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "6px", padding: "10px 12px" }}>
+            <div style={{ color: "#c9a84c", fontWeight: 700, marginBottom: "4px" }}>Setup required (one-time)</div>
+            1. Add <code style={{ color: "#c9a84c" }}>VITE_GOOGLE_CLIENT_ID</code> to Netlify environment variables.<br />
+            2. In Google Cloud Console, add your Netlify app URL as an authorized redirect URI for the OAuth client.
+          </div>
+          <button onClick={initiateGmailOAuth} style={{ ...S.btn, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+            <svg width="16" height="16" viewBox="0 0 18 18">
+              <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+              <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/>
+            </svg>
+            Connect Gmail
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Connected ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{ ...S.tab, maxWidth: "600px", margin: "0 auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+        <div style={S.label}>Gmail Inbox</div>
+        <button onClick={disconnect} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px", color: "#4a4060" }}>Disconnect</button>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", alignItems: "center" }}>
+        <button onClick={scan} disabled={scanning} style={{ ...S.btn, opacity: scanning ? 0.6 : 1, display: "flex", alignItems: "center", gap: "8px" }}>
+          {scanning
+            ? <><Spinner size={14} />{scanProgress || "Scanning..."}</>
+            : emails.length > 0 ? "Re-scan Inbox" : "Scan for Recruiter Emails"}
+        </button>
+        {visible.length > 0 && (
+          <span style={{ fontSize: "11px", color: "#6a6880" }}>{visible.length} found</span>
+        )}
+      </div>
+
+      {error && (
+        <div style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.25)", borderRadius: "6px", padding: "10px 14px", marginBottom: "16px", fontSize: "12px", color: "#f87171" }}>
+          {error}
+        </div>
+      )}
+
+      {!scanning && emails.length === 0 && !error && (
+        <div style={{ textAlign: "center", color: "#3a3860", fontSize: "13px", padding: "50px 0" }}>
+          <div style={{ fontSize: "32px", marginBottom: "12px", color: "#2a2840" }}>&#x2709;</div>
+          <div>No recruiter emails detected in the last 60 days.</div>
+          <div style={{ fontSize: "11px", color: "#2a2840", marginTop: "6px" }}>Scan checks subject lines, senders, and message content.</div>
+        </div>
+      )}
+
+      {visible.map(email => {
+        const p = email.parsed;
+        const ac = ACTION_COLORS[p.action] || ACTION_COLORS.none;
+        const alreadyAdded = addedIds.has(email.id);
+        const alreadyTracked = !alreadyAdded && cards.some(
+          c => c.company && p.company &&
+               c.company.toLowerCase() === p.company.toLowerCase() &&
+               c.stage !== "Rejected"
+        );
+        return (
+          <div key={email.id} style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "8px" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "#e8e6f0", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {email.subject || "(no subject)"}
+                </div>
+                <div style={{ fontSize: "11px", color: "#4a4860", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email.from}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+                <span style={{ fontSize: "9px", color: "#3a3860" }}>{(email.date || "").slice(0, 16)}</span>
+                {p.sentiment && (
+                  <span style={{ fontSize: "9px", color: SENTIMENT_COLOR[p.sentiment] || "#8a85a0", textTransform: "capitalize" }}>{p.sentiment}</span>
+                )}
+              </div>
+            </div>
+            <div style={{ marginBottom: "10px", display: "flex", gap: "5px", flexWrap: "wrap" }}>
+              {p.company && (
+                <span style={{ fontSize: "10px", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "2px 8px" }}>{p.company}</span>
+              )}
+              {p.role && (
+                <span style={{ fontSize: "10px", color: "#8a85a0", background: "rgba(255,255,255,0.04)", border: "1px solid #2a2840", borderRadius: "4px", padding: "2px 8px" }}>{p.role}</span>
+              )}
+              {p.action && p.action !== "none" && (
+                <span style={{ fontSize: "10px", color: ac.text, background: ac.bg, border: `1px solid ${ac.border}`, borderRadius: "4px", padding: "2px 8px", textTransform: "capitalize" }}>{p.action}</span>
+              )}
+            </div>
+            {p.summary && (
+              <div style={{ fontSize: "12px", color: "#8a85a0", lineHeight: 1.55, marginBottom: "12px" }}>{p.summary}</div>
+            )}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+              {alreadyAdded || alreadyTracked ? (
+                <span style={{ fontSize: "11px", color: "#4ade80" }}>
+                  {alreadyAdded ? "\u2713 Added to Tracker" : "\u2713 Already tracked"}
+                </span>
+              ) : (
+                <button onClick={() => addToTracker(email)} style={{ ...S.btnSmall, fontSize: "11px", padding: "4px 12px" }}>
+                  + Add to Tracker
+                </button>
+              )}
+              <button onClick={() => dismiss(email.id)} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px", color: "#4a4060" }}>
+                Dismiss
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {dismissed.size > 0 && (
+        <div style={{ textAlign: "center", marginTop: "8px" }}>
+          <button onClick={showAllDismissed} style={{ background: "none", border: "none", fontSize: "10px", color: "#3a3860", cursor: "pointer", padding: 0 }}>
+            Show {dismissed.size} dismissed
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2751,6 +3735,7 @@ function DrawerNav({ active, onChange, onClose, user }) {
     { id: "stories",   icon: "\u25C8", label: "Stories" },
     { id: "prep",      icon: "\u25CE", label: "Interview Prep" },
     { id: "profile",   icon: "\u25C9", label: "Profile" },
+    { id: "gmail",     icon: "\u2709", label: "Gmail" },
   ];
   return (
     <>
@@ -2842,6 +3827,7 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
   const inProgressCount = cards.filter(c => ["Screening","Hiring Manager","Panel","Exec"].includes(c.stage)).length;
   const hasResume = !!profile.resumeUploaded || !!profile.resumeText;
   const activeVariant = profile.resumeVariants?.find(v => v.id === profile.activeResumeId);
+  const velocity = computePipelineStats(cards);
 
   return (
     <div style={{ padding: "20px 16px 8px", maxWidth: "540px", margin: "0 auto" }}>
@@ -2907,6 +3893,32 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         ))}
       </div>
 
+      {velocity.active > 0 && (
+        <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>Pipeline Velocity</div>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: velocity.stalled.length > 0 ? "12px" : 0 }}>
+            <div>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: "#8a85a0", lineHeight: 1 }}>{velocity.avgDaysActive}<span style={{ fontSize: "11px", color: "#4a4860" }}>d</span></div>
+              <div style={{ fontSize: "9px", color: "#3a3860", marginTop: "4px", textTransform: "uppercase" }}>Avg active</div>
+            </div>
+            <div>
+              <div style={{ fontSize: "20px", fontWeight: 700, color: velocity.stalled.length > 0 ? "#c06060" : "#4ade80", lineHeight: 1 }}>{velocity.stalled.length}</div>
+              <div style={{ fontSize: "9px", color: "#3a3860", marginTop: "4px", textTransform: "uppercase" }}>Stalled 14d+</div>
+            </div>
+          </div>
+          {velocity.stalled.length > 0 && (
+            <div style={{ paddingTop: "10px", borderTop: "1px solid #2a2840" }}>
+              {velocity.stalled.slice(0, 3).map(s => (
+                <div key={s.card.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "#8a85a0", padding: "4px 0" }}>
+                  <span>{s.card.company || "Untitled"}{s.card.title ? ` — ${s.card.title}` : ""}</span>
+                  <span style={{ color: "#c06060", fontWeight: 600, fontSize: "10px", flexShrink: 0, marginLeft: "8px" }}>{s.daysInStage}d in {s.card.stage}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", padding: "14px 16px", marginBottom: "12px" }}>
         <div style={{ fontSize: "10px", fontWeight: 700, color: "#4f6ef7", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "12px" }}>Quick Actions</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -2914,6 +3926,7 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
             { label: "Fit Check a JD",    sub: "Paste a JD and score your fit",                                        nav: "analyze", icon: "\u2726", warn: false },
             { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "\u25C8", warn: stories.length === 0 },
             { label: "Update Profile",    sub: hasResume ? "Resume on file" : "No resume yet — add one",               nav: "profile", icon: "\u25C9", warn: !hasResume },
+            { label: "Gmail Inbox",       sub: "Scan for recruiter emails",                                            nav: "gmail",   icon: "\u2709", warn: false },
           ].map(a => (
             <button key={a.nav} onClick={() => onNavigate(a.nav)} style={{
               display: "flex", alignItems: "center", gap: "12px", padding: "10px",
@@ -2987,8 +4000,29 @@ export default function NarrativeOS() {
   useEffect(() => { storageSet("nos_stories", stories); }, [stories]);
   useEffect(() => { storageSet("nos_corrections", corrections); }, [corrections]);
 
+  // Handle Google OAuth implicit-flow redirect. If the URL hash contains
+  // access_token + state=gmail_oauth (set by initiateGmailOAuth), store the
+  // token scoped to the current user and navigate to the Gmail tab.
+  // This effect runs once on mount — the hash is only present immediately
+  // after Google redirects back to the app.
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token=")) {
+      const params = new URLSearchParams(hash.slice(1));
+      const accessToken = params.get("access_token");
+      const state = params.get("state");
+      if (accessToken && state === "gmail_oauth") {
+        const u = window.netlifyIdentity?.currentUser();
+        setGmailToken(u?.email || null, accessToken);
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        setActiveTab("gmail");
+      }
+    }
+  }, []);
+
   function makeCard(overrides = {}) {
-    return { id: generateId(), company: "", title: "", stage: "Considering", jd: "", jdUrl: "", tags: [], notes: "", resumeText: "", coverLetterText: "", resumeType: "", corrections: [], createdAt: getToday(), ...overrides };
+    const stage = overrides.stage || "Considering";
+    return { id: generateId(), company: "", title: "", stage, jd: "", jdUrl: "", tags: [], notes: "", resumeText: "", coverLetterText: "", resumeType: "", corrections: [], followUps: [], createdAt: getToday(), stageHistory: [{ stage, at: getToday() }], ...overrides };
   }
 
   function addCard() {
@@ -3000,7 +4034,12 @@ export default function NarrativeOS() {
   function handleTrackBuildResume(session) {
     const existing = cards.find(c => c.company === session.company && c.stage !== "Rejected");
     if (existing) {
-      setOpenCard({ ...existing, stage: existing.stage === "Considering" ? "Applied" : existing.stage });
+      const newStage = existing.stage === "Considering" ? "Applied" : existing.stage;
+      const history = Array.isArray(existing.stageHistory) ? existing.stageHistory : [];
+      const stageHistory = newStage !== existing.stage ? [...history, { stage: newStage, at: getToday() }] : history;
+      const updated = { ...existing, stage: newStage, stageHistory };
+      setCards(prev => prev.map(c => c.id === existing.id ? updated : c));
+      setOpenCard(updated);
     } else {
       const c = makeCard({ company: session.company || "", title: session.role || "", stage: "Applied", jd: session.jd, jdUrl: session.jdUrl });
       setCards(prev => [c, ...prev]);
@@ -3019,6 +4058,16 @@ export default function NarrativeOS() {
 
   function handleGoToInterviewPrep() { setActiveTab("tracker"); }
   function handleGoToCoverLetter() { setActiveTab("tracker"); }
+
+  // Drag-and-drop card reassignment from the board. Appends to stageHistory
+  // for pipeline velocity tracking. No-op if the stage didn't actually change.
+  function handleMoveCard(cardId, newStage) {
+    setCards(prev => prev.map(c => {
+      if (c.id !== cardId || c.stage === newStage) return c;
+      const history = Array.isArray(c.stageHistory) ? c.stageHistory : [];
+      return { ...c, stage: newStage, stageHistory: [...history, { stage: newStage, at: getToday() }] };
+    }));
+  }
 
   if (authLoading) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#080814", color: "#3a3860" }}><Spinner size={24} /></div>;
   if (!user) return <LoginGate />;
@@ -3052,7 +4101,7 @@ export default function NarrativeOS() {
         )}
         {activeTab === "tracker" && (
           <div style={{ padding: "16px 16px 0" }}>
-            <Board cards={cards} onCardClick={c => setOpenCard(c)} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} />
+            <Board cards={cards} onCardClick={c => setOpenCard(c)} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} onMoveCard={handleMoveCard} />
           </div>
         )}
         {activeTab === "analyze" && (
@@ -3069,8 +4118,9 @@ export default function NarrativeOS() {
           />
         )}
         {activeTab === "stories" && <MyStoriesTab profile={profile} stories={stories} setStories={setStories} />}
-        {activeTab === "profile" && <ProfileTab profile={profile} setProfile={setProfile} />}
+        {activeTab === "profile" && <ProfileTab profile={profile} setProfile={setProfile} stories={stories} cards={cards} />}
         {activeTab === "prep"    && <InterviewPrepStandalone onNavigate={setActiveTab} />}
+        {activeTab === "gmail"   && <GmailTab profile={profile} cards={cards} setCards={setCards} onNavigate={setActiveTab} />}
       </div>
 
       {openCard && (

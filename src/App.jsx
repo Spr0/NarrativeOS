@@ -122,7 +122,6 @@ function computeProfileCompleteness(profile, stories) {
     { key: "background",   label: "Professional summary",   weight: 10, done: ((profile?.background || "").trim().length >= 40) },
     { key: "prepContext",  label: "Positioning Intelligence", weight: 15, done: ((profile?.prepContext || "").trim().length >= 80) },
     { key: "resumeText",   label: "Resume uploaded",        weight: 25, done: !!(profile?.resumeText || "").trim() && !!profile?.resumeUploaded },
-    { key: "variants",     label: "At least 1 resume variant", weight: 5, done: Array.isArray(profile?.resumeVariants) && profile.resumeVariants.length > 0 },
     { key: "stories",      label: "3+ STAR stories",        weight: 20, done: Array.isArray(stories) && stories.length >= 3 },
     { key: "verified",     label: "Verified skills / corrections", weight: 10, done: Array.isArray(profile?.verifiedSkills) && profile.verifiedSkills.length > 0 },
   ];
@@ -3045,22 +3044,17 @@ function MyStoriesTab({ profile, stories: storiesProp, setStories }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ResumeVariantManager({ profile, setProfile }) {
-  const [name, setName] = useState("");
-
-  function addVariant() {
-    if (!name.trim()) return;
-    const v = { id: generateId(), name: name.trim(), text: profile.resumeText, createdAt: getToday() };
-    setProfile(p => ({ ...p, resumeVariants: [...(p.resumeVariants || []), v], activeResumeId: v.id }));
-    setName("");
-  }
   function activate(id) { setProfile(p => ({ ...p, activeResumeId: id })); }
   function remove(id) {
     setProfile(p => ({ ...p, resumeVariants: p.resumeVariants.filter(v => v.id !== id), activeResumeId: p.activeResumeId === id ? null : p.activeResumeId }));
   }
 
+  if (!(profile.resumeVariants || []).length) return null;
+
   return (
     <div style={{ marginTop: "16px" }}>
       <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "10px" }}>Resume Variants</div>
+      <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "8px" }}>Generated from job applications. Use the + Variant button after building a tailored resume in the Tracker.</div>
       {(profile.resumeVariants || []).map(v => (
         <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "rgba(20,20,35,0.5)", border: `1px solid ${v.id === profile.activeResumeId ? "#c9a84c" : "#2a2840"}`, borderRadius: "6px", marginBottom: "6px" }}>
           <span style={{ fontSize: "12px", color: v.id === profile.activeResumeId ? "#c9a84c" : "#8a85a0" }}>{v.name}</span>
@@ -3070,10 +3064,6 @@ function ResumeVariantManager({ profile, setProfile }) {
           </div>
         </div>
       ))}
-      <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Variant name (e.g. VP Tech)" style={{ ...S.input, flex: 1, fontSize: "12px" }} />
-        <button onClick={addVariant} disabled={!name.trim()} style={{ ...S.btnGhost, fontSize: "11px", opacity: name.trim() ? 1 : 0.5 }}>Save Variant</button>
-      </div>
     </div>
   );
 }

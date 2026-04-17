@@ -46,7 +46,7 @@ function getToday() {
 
 const DEFAULT_PROFILE = {
   name: "", displayName: "", email: "", phone: "",
-  address: "Bellingham, WA", linkedin: "", website: "",
+  address: "", linkedin: "", website: "",
   title: "", background: "", resumeText: "", resumeUploaded: false,
   profileTier: "senior",
   resumeVariants: [],
@@ -178,36 +178,11 @@ function computePipelineStats(cards) {
 
 const _ACCURACY_RULES = `ACCURACY RULES — HARD CONSTRAINTS (apply before writing any bullet or sentence):
 
-CYPRESS CREEK RENEWABLES (CCR):
-- Microsoft Copilot result = 27% reduction in compliance FINES — never "cycle time" or "cycle times"
-- ERP = $6.8M NetSuite — never attribute $28M ERP to CCR; $28M belongs to EDF only
-- SaaS portfolio = $13M+, 15% OPEX reduction, $2M software cost reduction — never EBITDA at CCR
-- Always "PE-backed renewable energy developer and operator" — never "regulated utility"
-- SAFe / PI Planning belongs at Percipio and Nike only — never at CCR
-
-EDF RENEWABLES:
-- Programs rationalized: 73 to 15 — never 75, never 50 as starting number
-- Result: $28M annualized EBITDA, $4.8M SG&A reduction — never attribute these to CCR
-- Always "PE-backed renewable energy developer and operator" — never "regulated utility"
-- Never reference "Wardley Mapping" by name — reframe as "technology landscape analysis," "capability mapping," or "strategic portfolio visualization"
-
-CONFIDENTIAL AI VENTURE:
-- Always name as "Confidential AI Venture (NDA)" — never "Stealth" or "Early-Stage AI Venture"
-- Title always "COO / Strategic Advisor" — never just "Strategic Advisor"
-
-NIKE:
-- 4 of 8 Scrum teams directly led — never "12+ teams"
-- Nike at Percipio = B2B supply chain/airbag procurement platform for OIA (Oregon International Airfreight) — never "omnichannel"
-- Verify: $2.2B DTC growth reference, 2015 Nike Global Maxim Award
-
-INTEL:
-- Verify: $12M annual savings metric present
-
-UNIVERSAL RULES:
+- Use ONLY facts, figures, and details present in the candidate's resume or profile — never invent metrics, company descriptions, or outcomes
+- Never attribute a metric or achievement to the wrong company — preserve the original association from the resume
 - No em dashes anywhere in any output — use commas or restructure
-- Location: always Bellingham, WA — never Portland, OR
-- MBA: always "MBA – Executive Finance Module" — never standalone "MBA"
-- Compensation: never include comp note or expectation in any resume or cover letter`;
+- Compensation: never include comp note or expectation in any resume or cover letter
+- Do not invent or embellish titles, dates, or credentials not stated in the source material`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HANKEL FRAMEWORK
@@ -246,26 +221,23 @@ POTENTIAL vocabulary: "Positioned to," "Poised to," "Prepared to," "Ready to," "
 const _HANKEL_HYBRID_BULLETS = `HYBRID BULLET ARCHITECTURE — Potential + Results (Hankel "Esp. Do This"):
 Structure: [Potential phrase], [cooperative context], as demonstrated by [specific proof], [agreeableness signal].
 
-Examples calibrated to this candidate:
-- "Positioned to lead enterprise portfolio governance at expanded scale, having rationalized 73 competing initiatives to 15 focused programs — eliminating duplication, restoring prioritization, and building alignment across operations, finance, and asset management."
-- "Poised to drive enterprise-wide AI adoption, drawing on governance framework development that reduced unsanctioned tool usage while strengthening cross-functional trust in technology decisions."
-- "Prepared to own full P&L accountability at expanded scope, as demonstrated by leading the EDF Asset Optimization CD3 prioritization that cut 73 in-flight initiatives to 15, delivering $28M in annualized EBITDA through disciplined execution and cross-functional focus."
-- "Ready to lead services commercialization, building on a strong history of productizing internal capability that generated $2M+ in revenue while enabling team growth across two business units."
+Example format:
+- "Positioned to lead [function] at expanded scale, having [specific achievement with quantified result]."
+- "Poised to drive [initiative], drawing on [prior experience] that [measurable outcome]."
+- "Prepared to own [scope], as demonstrated by [specific project or role] delivering [quantified impact]."
+- "Ready to lead [area], building on a strong history of [capability] that [result with metric]."
 
 65% potential-first. 35% proof-anchored. EVERY bullet has at least one quantified result.
-Do NOT lead bullets with pure performance metrics ("Drove 30% revenue increase").`;
+Do NOT lead bullets with pure performance metrics ("Drove 30% revenue increase").
+Use ONLY facts and figures present in the candidate's resume — do not invent metrics.`;
 
 const _PAGE_RULES = `PAGE LIMIT — DENSE 2 PAGES:
-- Bullet distribution (total 20-22 bullets): Cypress Creek (VP): 6-7 | EDF (Sr Dir): 5-6 | Percipio (Sr Mgr): 3-4 | Nike (Dir): 2-3 | Intel (Sr PM): 2
-- Roles before Intel Corporation (Apr 2013) EXCLUDED entirely.
+- Bullet distribution (total 20-22 bullets): allocate proportionally by recency and seniority — most recent and most senior roles get the most bullets (5-7), older or lower-level roles get fewer (2-3).
+- Roles beyond 15 years ago or below the candidate's current career tier may be condensed or omitted.
 - Certifications: single compact line with pipe separators.
 - Every bullet must be substantive. No filler.`;
 
-const _PROJECTS = `PROJECTS SECTION — after PROFESSIONAL EXPERIENCE, before EDUCATION:
-SELECTED PROJECTS
-- HendersonSolution.com — Executive advisory platform; AI-assisted positioning and portfolio storytelling for senior transformation leaders
-- CareerForge — AI-powered job search platform (React/Netlify); multi-profile support, STAR story library, ATS optimization, and DOCX resume generation
-- ClauseLens — AI contract analysis tool; clause-level risk identification and redlining with safety and compliance guardrails`;
+const _PROJECTS = ``;
 
 const _BASE_FMT = `FORMAT: No commentary, no markdown, no asterisks. Name ALL CAPS first line. Contact line second with | separators. Section headers ALL CAPS no punctuation. Job entries: Title | Company | Years. Bullets start with dash (-). Do not invent facts.`;
 
@@ -387,7 +359,7 @@ ${tc.voice}
 
 ${typeGuidance}
 
-SCOPE: Analyze only roles from Intel Corporation (Apr 2013) forward. Roles prior to Intel are excluded.
+SCOPE: Focus analysis on the candidate's most recent and most relevant roles. Older or lower-level roles may be given less weight.
 
 ${_ACCURACY_RULES}
 
@@ -420,7 +392,7 @@ ${_BASE_FMT}
 
 HYBRID FORMAT:
 1. Name (ALL CAPS) + Contact line
-2. EXECUTIVE PROFILE section — a functional descriptor header (e.g. "Enterprise Transformation & Portfolio Leadership — VP/SVP Level") followed by 3-4 forward-looking sentences on what the candidate is positioned to do. NOT a career history recap.
+2. EXECUTIVE PROFILE section — a functional descriptor header (e.g. "Enterprise Transformation & Portfolio Leadership — VP/SVP Level") followed by 3-4 sentences tuned to THIS specific role and company from the Job Description. Open with the candidate's strongest alignment to the target position. Use the summaryRewrite from the Approved Strategy as the base, then tighten it to name the specific mandate or challenge from the JD. NOT a career history recap.
 3. PROFESSIONAL EXPERIENCE — reverse chronological, context sentence per role
 4. ${_PROJECTS}
 5. EDUCATION + CERTIFICATIONS (single compact line with pipes)
@@ -442,10 +414,10 @@ ${_BASE_FMT}
 
 FUNCTIONAL FORMAT:
 1. Name (ALL CAPS) + Contact line
-2. EXECUTIVE SUMMARY — 3 forward-looking sentences on scope and what the candidate is positioned to do
+2. EXECUTIVE SUMMARY — 3 sentences, mandatory, tuned to THIS specific role and company from the Job Description. Open with the candidate's strongest alignment to the target position. Use the summaryRewrite from the Approved Strategy as the base, then tighten it to name the specific role mandate or challenge from the JD. Forward-looking but anchored by the JD requirements, not generic career scope.
 3. AREAS OF EXPERTISE — 4-5 competency-grouped sections:
    Headers: ENTERPRISE TRANSFORMATION | FINANCIAL STEWARDSHIP | PORTFOLIO GOVERNANCE | TECHNOLOGY & AI STRATEGY | STAKEHOLDER & COMMERCIAL LEADERSHIP
-   - 3-4 bullets per section referencing companies inline ("at Cypress Creek Renewables," "during the EDF transformation program")
+   - 3-4 bullets per section referencing the candidate's actual companies inline (e.g. "at [Company]," "during the [Company] transformation")
    - 60% potential-first, 40% proof-anchored bullets
 4. PROFESSIONAL EXPERIENCE — brief list only: Title | Company | Dates (one line, NO bullets)
 5. ${_PROJECTS}
@@ -464,11 +436,13 @@ Apply ALL approved edits from the strategy. Produce clean resume text only.
 ${_BASE_FMT}
 
 CHRONOLOGICAL FORMAT:
-- Reverse chronological order, full date ranges per role
-- Context sentence per role: one line on what the company/BU did and its scale
-- 60% PROOF-ANCHORED bullets, 40% POTENTIAL-BRIDGE bullets
-- Potential bridges: "[Achievement], positioning the organization to [future outcome]"
-- Mix agreeableness signals WITH hard metrics in the same bullet
+1. Name (ALL CAPS) + Contact line
+2. EXECUTIVE SUMMARY — mandatory, 3 sentences, tuned to THIS specific role and company from the Job Description. Open with the candidate's strongest alignment to the target position. Use the summaryRewrite from the Approved Strategy as the base, then tighten it to name the specific role or challenge from the JD. Do not write a generic career history recap.
+3. PROFESSIONAL EXPERIENCE — reverse chronological, full date ranges per role
+   - Context sentence per role: one line on what the company/BU did and its scale
+   - 60% PROOF-ANCHORED bullets, 40% POTENTIAL-BRIDGE bullets
+   - Potential bridges: "[Achievement], positioning the organization to [future outcome]"
+   - Mix agreeableness signals WITH hard metrics in the same bullet
 
 ${_HANKEL_BANNED}
 ${_HANKEL_UPGRADE}
@@ -857,36 +831,9 @@ function getActiveResumeVariant(profile) {
     || profile.resumeVariants[0] || null;
 }
 
-const PRE_INTEL_COMPANIES = ["proudcloud", "bookmans", "bookman's"];
-
 // ─── Gap Monitor ──────────────────────────────────────────────────────────────
 
-const SEED_GAPS = [
-  {
-    gap_id: "plm-cpq-cad",
-    label: "SaaS PLM / CPQ / CAD Domain",
-    category: "domain",
-    frequency: 1,
-    reframe: "Bridge via NetSuite ERP implementation lead at CCR ($6.8M, on time/under budget), Salesforce + Sitetracker governance at CCR and EDF, and $13M+ SaaS portfolio rationalization. Frame as \u2018complex multi-vendor SaaS ecosystem governance\u2019 rather than point-solution depth. Copilot AI deployment and OpenWebUI/Ollama builds signal rapid platform onboarding.",
-    credential_path: "No cert needed. If role is PLM-heavy, explore Salesforce CPQ Specialist badge (free, 2-3 weeks). Flag for employer as fast-follow during onboarding.",
-  },
-  {
-    gap_id: "customer-facing-impl-consulting",
-    label: "Customer-Facing Implementation Consulting",
-    category: "delivery",
-    frequency: 1,
-    reframe: "Bridge via Percipio Consulting Group (Mar 2015-Oct 2020): advisory delivery across Avangrid, Pacific Power, OIA/Nike B2B supply chain platform. Frame as \u2018operator-side consulting delivery\u2019 \u2014 Scott has sat in the seat consulting firms bill into. At EDF, initially engaged as Percipio consultant before converting to FTE; that boundary crossing is a direct analog to external consulting delivery. AI Venture COO role also included external stakeholder advisory.",
-    credential_path: "No cert needed. If pattern persists in target roles, consider SAP Activate or Salesforce Implementation Partner credentials as signal boosters. Low priority unless 3+ JDs flag this.",
-  },
-  {
-    gap_id: "change-management-cert",
-    label: "Formal Change Management Certification",
-    category: "credential",
-    frequency: 1,
-    reframe: "Bridge via SAFe SPC (certified 15 Scrum Masters at Percipio, firm-wide Agile adoption), LSSBB (process change at scale), ITIL v4 (service transition), and documented OCM delivery at EDF (73-to-15 program rationalization, cross-functional stakeholder alignment with Paris HQ). Frame as \u2018embedded OCM practitioner\u2019 rather than credentialed specialist.",
-    credential_path: "PROSCI Change Management Practitioner: 3-day virtual program, ~$3,500, widely recognized. If this gap surfaces in 2+ more JDs at target level, prioritize. Axelos (APMG) is an alternative at lower cost. CCAIO already signals governance-level change framing for AI contexts.",
-  },
-];
+const SEED_GAPS = [];
 
 function loadGaps() {
   try {
@@ -900,27 +847,6 @@ function saveGaps(gaps) {
   storageSet("nos_gaps", gaps);
 }
 
-function stripPreIntelRoles(text) {
-  if (!text) return text;
-  const lines = text.split("\n");
-  const result = [];
-  let skipping = false;
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i];
-    const lower = t.toLowerCase();
-    const isRoleHeader = t.includes("|") && !t.includes("@") && t.split("|").length >= 2 && t.split("|").length <= 4;
-    if (isRoleHeader) {
-      const isExcluded = PRE_INTEL_COMPANIES.some(c => lower.includes(c));
-      skipping = isExcluded;
-      if (!skipping) result.push(t);
-      continue;
-    }
-    const isSectionHeader = t === t.toUpperCase() && t.trim().length > 2 && t.trim().length < 40 && !t.includes("|") && !t.includes("@");
-    if (isSectionHeader) skipping = false;
-    if (!skipping) result.push(t);
-  }
-  return result.join("\n");
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. API
@@ -1252,7 +1178,7 @@ async function buildPdfBlob(text) {
 async function buildResumeDocxBlob(finalResumeText, company, profile) {
   const { Document, Packer, Paragraph, TextRun, AlignmentType } = await getDocxLib();
   const children = [];
-  const lines = stripPreIntelRoles(finalResumeText).split("\n");
+  const lines = (finalResumeText || "").split("\n");
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
     if (!t) { children.push(new Paragraph({ text: "", spacing: { after: 40 } })); continue; }
@@ -1327,7 +1253,7 @@ Hallucinated metrics are a disqualifying error — omission is always safer than
 ${_ACCURACY_RULES}
 
 VERIFIED BASE RESUME (single source of truth):
-${stripPreIntelRoles(baseResume)}`;
+${baseResume}`;
 
   return callClaude(
     PROMPTS.resumeRender(resumeType),
@@ -2820,7 +2746,7 @@ Return ONLY the revised JSON object. No markdown. No commentary. No code fences.
               </div>
               <div style={{ marginBottom: "10px" }}>
                 <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", marginBottom: "4px" }}>Your Experience</div>
-                <textarea value={gapForm.context} onChange={e => setGapForm(f => ({ ...f, context: e.target.value }))} rows={3} placeholder="e.g. 6 years across Jira, AzureDevOps, and ClickUp — managed 73-initiative portfolio in Jira at EDF, rationalized to 15." style={{ ...S.input, resize: "vertical", fontSize: "12px" }} />
+                <textarea value={gapForm.context} onChange={e => setGapForm(f => ({ ...f, context: e.target.value }))} rows={3} placeholder="e.g. 6 years across Jira, AzureDevOps, and ClickUp — managed large initiative portfolios and cross-functional delivery." style={{ ...S.input, resize: "vertical", fontSize: "12px" }} />
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button onClick={saveGapCorrection} disabled={!gapForm.skill.trim() || !gapForm.context.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 16px", opacity: !gapForm.skill.trim() || !gapForm.context.trim() ? 0.5 : 1 }}>
@@ -3183,8 +3109,7 @@ function ProfileTab({ profile, setProfile, stories = [], cards = [] }) {
     if (resumeText && !profile.name) {
       try { contact = await extractContactFromResume(resumeText); } catch {}
     }
-    const stripped = stripPreIntelRoles(resumeText);
-    setProfile(p => ({ ...p, resumeText: stripped, resumeUploaded: true, ...contact }));
+    setProfile(p => ({ ...p, resumeText, resumeUploaded: true, ...contact }));
     setSaved(true);
     setExtracting(false);
     setTimeout(() => setSaved(false), 2000);
@@ -3261,14 +3186,14 @@ function ProfileTab({ profile, setProfile, stories = [], cards = [] }) {
           onChange={e => setProfile(p => ({ ...p, prepContext: e.target.value }))}
           rows={7}
           style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px", lineHeight: 1.6 }}
-          placeholder={"Example:\n- Full P&L owner at CCR and EDF — budget, forecast, board reporting\n- $28M EBITDA, $13M portfolio, 27% compliance reduction, $6.8M ERP\n- Deployed production AI (NarrativeOS, ClauseLens) on Anthropic API\n- Target comp: $210K base\n- Likely objection: no SaaS background — counter with adjacent skills + hands-on AI"}
+          placeholder={"Example:\n- Key metrics and proof points from your experience (revenue, headcount, budgets, outcomes)\n- Achievements you want highlighted in resumes and cover letters\n- Target compensation range\n- Likely objections and how you'd counter them\n- Anything else you want the AI to factor into your positioning"}
         />
       </div>
       <div style={{ marginBottom: "16px" }}>
         <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "8px" }}>Resume Text</div>
         <textarea value={resumeText} onChange={e => setResumeText(e.target.value)} rows={8} style={{ ...S.input, width: "100%", resize: "vertical", fontSize: "11px" }} placeholder="Paste resume text here, or upload a file below..." />
         <input type="file" accept=".txt,.md,.docx,.pdf" onChange={handleFile} style={{ marginTop: "8px", fontSize: "11px", color: "#6a6880" }} />
-        <div style={{ fontSize: "10px", color: "#3a3860", marginTop: "4px" }}>Accepts .docx, .txt, .md, or .pdf. Pre-Intel roles (Proudcloud, Bookmans) are automatically stripped.</div>
+        <div style={{ fontSize: "10px", color: "#3a3860", marginTop: "4px" }}>Accepts .docx, .txt, .md, or .pdf.</div>
       </div>
       <button onClick={saveProfile} disabled={extracting} style={{ ...S.btn, display: "flex", gap: "8px", alignItems: "center", opacity: extracting ? 0.5 : 1 }}>
         {extracting ? <><Spinner /> Extracting contact...</> : "Save Profile"}

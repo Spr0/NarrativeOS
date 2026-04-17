@@ -210,9 +210,9 @@ const _HANKEL_HYBRID_BULLETS = `HYBRID BULLET ARCHITECTURE — Potential + Resul
 Structure: [Potential phrase], [cooperative context], as demonstrated by [specific proof], [agreeableness signal].
 
 Examples calibrated to this candidate:
-- "Positioned to lead complex portfolio governance at expanded scale, having partnered with 75+ initiative owners to rationalize a $40M+ program while building alignment across finance, technology, and operations."
+- "Positioned to lead enterprise portfolio governance at expanded scale, having rationalized 73 competing initiatives to 15 focused programs — eliminating duplication, restoring prioritization, and building alignment across operations, finance, and asset management."
 - "Poised to drive enterprise-wide AI adoption, drawing on governance framework development that reduced unsanctioned tool usage while strengthening cross-functional trust in technology decisions."
-- "Prepared to own P&L accountability at increased scope, as demonstrated by delivering $28M annualized EBITDA improvement while improving stakeholder engagement across 15 initiatives."
+- "Prepared to own full P&L accountability at expanded scope, as demonstrated by leading the EDF Asset Optimization CD3 prioritization that cut 73 in-flight initiatives to 15, delivering $28M in annualized EBITDA through disciplined execution and cross-functional focus."
 - "Ready to lead services commercialization, building on a strong history of productizing internal capability that generated $2M+ in revenue while enabling team growth across two business units."
 
 65% potential-first. 35% proof-anchored. EVERY bullet has at least one quantified result.
@@ -2732,7 +2732,7 @@ Return ONLY the revised JSON object. No markdown. No commentary. No code fences.
               </div>
               <div style={{ marginBottom: "10px" }}>
                 <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", marginBottom: "4px" }}>Your Experience</div>
-                <textarea value={gapForm.context} onChange={e => setGapForm(f => ({ ...f, context: e.target.value }))} rows={3} placeholder="e.g. 6 years across Jira, AzureDevOps, and ClickUp — managed 75+ initiative portfolio in Jira at EDF." style={{ ...S.input, resize: "vertical", fontSize: "12px" }} />
+                <textarea value={gapForm.context} onChange={e => setGapForm(f => ({ ...f, context: e.target.value }))} rows={3} placeholder="e.g. 6 years across Jira, AzureDevOps, and ClickUp — managed 73-initiative portfolio in Jira at EDF, rationalized to 15." style={{ ...S.input, resize: "vertical", fontSize: "12px" }} />
               </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 <button onClick={saveGapCorrection} disabled={!gapForm.skill.trim() || !gapForm.context.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 16px", opacity: !gapForm.skill.trim() || !gapForm.context.trim() ? 0.5 : 1 }}>

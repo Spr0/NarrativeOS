@@ -173,6 +173,43 @@ function computePipelineStats(cards) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ACCURACY RULES — non-negotiable fact constraints applied to every output
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _ACCURACY_RULES = `ACCURACY RULES — HARD CONSTRAINTS (apply before writing any bullet or sentence):
+
+CYPRESS CREEK RENEWABLES (CCR):
+- Microsoft Copilot result = 27% reduction in compliance FINES — never "cycle time" or "cycle times"
+- ERP = $6.8M NetSuite — never attribute $28M ERP to CCR; $28M belongs to EDF only
+- SaaS portfolio = $13M+, 15% OPEX reduction, $2M software cost reduction — never EBITDA at CCR
+- Always "PE-backed renewable energy developer and operator" — never "regulated utility"
+- SAFe / PI Planning belongs at Percipio and Nike only — never at CCR
+
+EDF RENEWABLES:
+- Programs rationalized: 73 to 15 — never 75, never 50 as starting number
+- Result: $28M annualized EBITDA, $4.8M SG&A reduction — never attribute these to CCR
+- Always "PE-backed renewable energy developer and operator" — never "regulated utility"
+- Never reference "Wardley Mapping" by name — reframe as "technology landscape analysis," "capability mapping," or "strategic portfolio visualization"
+
+CONFIDENTIAL AI VENTURE:
+- Always name as "Confidential AI Venture (NDA)" — never "Stealth" or "Early-Stage AI Venture"
+- Title always "COO / Strategic Advisor" — never just "Strategic Advisor"
+
+NIKE:
+- 4 of 8 Scrum teams directly led — never "12+ teams"
+- Nike at Percipio = B2B supply chain/airbag procurement platform for OIA (Oregon International Airfreight) — never "omnichannel"
+- Verify: $2.2B DTC growth reference, 2015 Nike Global Maxim Award
+
+INTEL:
+- Verify: $12M annual savings metric present
+
+UNIVERSAL RULES:
+- No em dashes anywhere in any output — use commas or restructure
+- Location: always Bellingham, WA — never Portland, OR
+- MBA: always "MBA – Executive Finance Module" — never standalone "MBA"
+- Compensation: never include comp note or expectation in any resume or cover letter`;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // HANKEL FRAMEWORK
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -351,6 +388,8 @@ ${tc.voice}
 ${typeGuidance}
 
 SCOPE: Analyze only roles from Intel Corporation (Apr 2013) forward. Roles prior to Intel are excluded.
+
+${_ACCURACY_RULES}
 
 HANKEL LANGUAGE FRAMEWORK — apply to all bullet edits:
 ${_HANKEL_BANNED}
@@ -673,7 +712,7 @@ STAR FORMAT:
 
 HOOK GUIDANCE — when building the hook sentence, guide toward PROOF + POTENTIAL BRIDGE:
 Format: "[Achieved X result], which now positions me to [what this experience enables going forward]."
-Example: "Surfaced $13M in SaaS rationalization across a 75-initiative portfolio, which positions me to own enterprise-scale vendor governance with direct P&L accountability."
+Example: "Rationalized 73 competing initiatives to 15 high-value programs that delivered $28M in EBITDA, which positions me to own enterprise-scale portfolio governance with direct P&L accountability."
 This format works for both the 30-second phone screen opener and resume bullets.
 
 When asking each section, briefly remind the user what interviewers are listening for. Keep it natural.
@@ -820,6 +859,47 @@ function getActiveResumeVariant(profile) {
 
 const PRE_INTEL_COMPANIES = ["proudcloud", "bookmans", "bookman's"];
 
+// ─── Gap Monitor ──────────────────────────────────────────────────────────────
+
+const SEED_GAPS = [
+  {
+    gap_id: "plm-cpq-cad",
+    label: "SaaS PLM / CPQ / CAD Domain",
+    category: "domain",
+    frequency: 1,
+    reframe: "Bridge via NetSuite ERP implementation lead at CCR ($6.8M, on time/under budget), Salesforce + Sitetracker governance at CCR and EDF, and $13M+ SaaS portfolio rationalization. Frame as \u2018complex multi-vendor SaaS ecosystem governance\u2019 rather than point-solution depth. Copilot AI deployment and OpenWebUI/Ollama builds signal rapid platform onboarding.",
+    credential_path: "No cert needed. If role is PLM-heavy, explore Salesforce CPQ Specialist badge (free, 2-3 weeks). Flag for employer as fast-follow during onboarding.",
+  },
+  {
+    gap_id: "customer-facing-impl-consulting",
+    label: "Customer-Facing Implementation Consulting",
+    category: "delivery",
+    frequency: 1,
+    reframe: "Bridge via Percipio Consulting Group (Mar 2015-Oct 2020): advisory delivery across Avangrid, Pacific Power, OIA/Nike B2B supply chain platform. Frame as \u2018operator-side consulting delivery\u2019 \u2014 Scott has sat in the seat consulting firms bill into. At EDF, initially engaged as Percipio consultant before converting to FTE; that boundary crossing is a direct analog to external consulting delivery. AI Venture COO role also included external stakeholder advisory.",
+    credential_path: "No cert needed. If pattern persists in target roles, consider SAP Activate or Salesforce Implementation Partner credentials as signal boosters. Low priority unless 3+ JDs flag this.",
+  },
+  {
+    gap_id: "change-management-cert",
+    label: "Formal Change Management Certification",
+    category: "credential",
+    frequency: 1,
+    reframe: "Bridge via SAFe SPC (certified 15 Scrum Masters at Percipio, firm-wide Agile adoption), LSSBB (process change at scale), ITIL v4 (service transition), and documented OCM delivery at EDF (73-to-15 program rationalization, cross-functional stakeholder alignment with Paris HQ). Frame as \u2018embedded OCM practitioner\u2019 rather than credentialed specialist.",
+    credential_path: "PROSCI Change Management Practitioner: 3-day virtual program, ~$3,500, widely recognized. If this gap surfaces in 2+ more JDs at target level, prioritize. Axelos (APMG) is an alternative at lower cost. CCAIO already signals governance-level change framing for AI contexts.",
+  },
+];
+
+function loadGaps() {
+  try {
+    const v = storageGet("nos_gaps");
+    if (Array.isArray(v) && v.length > 0) return v;
+  } catch { /* */ }
+  return SEED_GAPS.map(g => ({ ...g, first_seen: new Date().toISOString(), last_seen: new Date().toISOString() }));
+}
+
+function saveGaps(gaps) {
+  storageSet("nos_gaps", gaps);
+}
+
 function stripPreIntelRoles(text) {
   if (!text) return text;
   const lines = text.split("\n");
@@ -872,8 +952,10 @@ async function callClaude(system, user, maxTokens = 2000) {
       },
       body: JSON.stringify({ mode: "standard", system, userMessage: user, maxTokens }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error?.message || `API ${res.status}`);
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error(`Server error (HTTP ${res.status})`); }
+    if (!res.ok || data.error) throw new Error(data.error?.message || data.error || `API ${res.status}`);
     const text = data.content?.find(b => b.type === "text")?.text || "";
     trackCost((system + user).length, text.length);
     return text;
@@ -896,8 +978,10 @@ Scope is limited to public information about the company.`;
       },
       body: JSON.stringify({ mode: "search", system, userMessage: query, maxTokens: 1500 }),
     });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error?.message || `API ${res.status}`);
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { throw new Error(`Server error (HTTP ${res.status})`); }
+    if (!res.ok || data.error) throw new Error(data.error?.message || data.error || `API ${res.status}`);
     const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
     trackCost(query.length, (text || "").length);
     return text || "No information found.";
@@ -1239,6 +1323,8 @@ Do NOT upgrade a number (e.g. "reduced by 25%" when the resume says "reduced cyc
 Do NOT add team sizes, dollar amounts, or percentages that are not in the base resume.
 If the strategy recommends a bullet you cannot verify, OMIT IT rather than fabricate it.
 Hallucinated metrics are a disqualifying error — omission is always safer than invention.
+
+${_ACCURACY_RULES}
 
 VERIFIED BASE RESUME (single source of truth):
 ${stripPreIntelRoles(baseResume)}`;
@@ -1990,9 +2076,11 @@ function Board({ cards: cardsProp, onCardClick, onAddCard, onExport, onMoveCard 
 
 function resumeFilename(profile, company) {
   const parts = (profile.name || "").trim().split(/\s+/).filter(Boolean);
+  const firstName = parts[0] || "";
   const lastName = parts.length > 1 ? parts[parts.length - 1] : parts[0] || "Resume";
+  const fullName = firstName && firstName !== lastName ? `${firstName}_${lastName}` : lastName;
   const co = (company || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "");
-  return co ? `${lastName}_${co}` : `${lastName}_Draft`;
+  return co ? `${fullName}_${co}` : `${fullName}_Draft`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3724,6 +3812,137 @@ function GmailTab({ profile, cards, setCards }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GAP MONITOR TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GAP_CATEGORY_COLORS = {
+  domain:     { text: "#7dd3fc", bg: "rgba(125,211,252,0.08)", border: "rgba(125,211,252,0.2)" },
+  delivery:   { text: "#c084fc", bg: "rgba(192,132,252,0.08)", border: "rgba(192,132,252,0.2)" },
+  credential: { text: "#fbbf24", bg: "rgba(251,191,36,0.08)",  border: "rgba(251,191,36,0.2)"  },
+};
+
+function GapMonitorTab({ gaps, setGaps }) {
+  const [expanded, setExpanded] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({});
+
+  function startEdit(g) {
+    setEditingId(g.gap_id);
+    setEditDraft({ reframe: g.reframe || "", credential_path: g.credential_path || "" });
+    setExpanded(g.gap_id);
+  }
+
+  function saveEdit(gap_id) {
+    setGaps(prev => prev.map(g => g.gap_id === gap_id
+      ? { ...g, reframe: editDraft.reframe, credential_path: editDraft.credential_path, last_seen: new Date().toISOString() }
+      : g
+    ));
+    setEditingId(null);
+  }
+
+  function cancelEdit() { setEditingId(null); }
+
+  function bumpFrequency(gap_id) {
+    setGaps(prev => prev.map(g => g.gap_id === gap_id
+      ? { ...g, frequency: (g.frequency || 1) + 1, last_seen: new Date().toISOString() }
+      : g
+    ));
+  }
+
+  const sorted = [...gaps].sort((a, b) => (b.frequency || 0) - (a.frequency || 0));
+
+  return (
+    <div style={{ padding: "20px 16px", maxWidth: "540px", margin: "0 auto" }}>
+      <div style={{ marginBottom: "18px" }}>
+        <div style={{ fontSize: "18px", fontWeight: 700, color: "#e8e6f0" }}>Gap Monitor</div>
+        <div style={{ fontSize: "11px", color: "#4a4060", marginTop: "4px" }}>Recurring gaps flagged across JDs. Tap a gap to see your reframe.</div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {sorted.map(g => {
+          const cc = GAP_CATEGORY_COLORS[g.category] || GAP_CATEGORY_COLORS.domain;
+          const isOpen = expanded === g.gap_id;
+          const isEditing = editingId === g.gap_id;
+          return (
+            <div key={g.gap_id} style={{ background: "#181a2e", border: "1px solid #2e3050", borderRadius: "10px", overflow: "hidden" }}>
+              <div
+                onClick={() => setExpanded(isOpen ? null : g.gap_id)}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", cursor: "pointer", gap: "10px" }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#c0bce0", marginBottom: "4px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.label}</div>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "9px", fontWeight: 700, color: cc.text, background: cc.bg, border: `1px solid ${cc.border}`, borderRadius: "4px", padding: "1px 7px", textTransform: "uppercase", letterSpacing: "0.07em" }}>{g.category}</span>
+                    <span style={{ fontSize: "10px", color: g.frequency >= 3 ? "#c06060" : g.frequency >= 2 ? "#fbbf24" : "#4a4860" }}>
+                      {g.frequency} JD{g.frequency !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                  <button
+                    onClick={e => { e.stopPropagation(); bumpFrequency(g.gap_id); }}
+                    title="Mark as seen in another JD"
+                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid #2a2840", borderRadius: "4px", color: "#6a6880", fontSize: "10px", padding: "3px 8px", cursor: "pointer", fontFamily: "'DM Sans', system-ui, sans-serif" }}
+                  >+1 JD</button>
+                  <span style={{ fontSize: "11px", color: "#2a2840" }}>{isOpen ? "\u25B4" : "\u25BE"}</span>
+                </div>
+              </div>
+
+              {isOpen && (
+                <div style={{ padding: "0 14px 14px", borderTop: "1px solid #1e2038" }}>
+                  {isEditing ? (
+                    <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>Reframe</div>
+                        <textarea
+                          value={editDraft.reframe}
+                          onChange={e => setEditDraft(d => ({ ...d, reframe: e.target.value }))}
+                          rows={5}
+                          style={{ width: "100%", background: "#0e1020", border: "1px solid #2a2840", borderRadius: "6px", color: "#c0bce0", fontSize: "12px", padding: "8px 10px", resize: "vertical", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: 1.6, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "4px" }}>Credential Path</div>
+                        <textarea
+                          value={editDraft.credential_path}
+                          onChange={e => setEditDraft(d => ({ ...d, credential_path: e.target.value }))}
+                          rows={3}
+                          style={{ width: "100%", background: "#0e1020", border: "1px solid #2a2840", borderRadius: "6px", color: "#c0bce0", fontSize: "12px", padding: "8px 10px", resize: "vertical", fontFamily: "'DM Sans', system-ui, sans-serif", lineHeight: 1.6, boxSizing: "border-box" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button onClick={() => saveEdit(g.gap_id)} style={{ ...S.btn, fontSize: "11px", padding: "5px 14px" }}>Save</button>
+                        <button onClick={cancelEdit} style={{ ...S.btnGhost, fontSize: "11px", padding: "5px 14px" }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div>
+                        <div style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>How to Reframe</div>
+                        <div style={{ fontSize: "12px", color: "#8a85a0", lineHeight: 1.65 }}>{g.reframe || "\u2014"}</div>
+                      </div>
+                      {g.credential_path && (
+                        <div>
+                          <div style={{ fontSize: "9px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Credential Path</div>
+                          <div style={{ fontSize: "12px", color: "#8a85a0", lineHeight: 1.65 }}>{g.credential_path}</div>
+                        </div>
+                      )}
+                      <div>
+                        <button onClick={() => startEdit(g)} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px" }}>Edit</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DRAWER NAV
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3736,6 +3955,7 @@ function DrawerNav({ active, onChange, onClose, user }) {
     { id: "prep",      icon: "\u25CE", label: "Interview Prep" },
     { id: "profile",   icon: "\u25C9", label: "Profile" },
     { id: "gmail",     icon: "\u2709", label: "Gmail" },
+    { id: "gaps",      icon: "\u25A6", label: "Gap Monitor" },
   ];
   return (
     <>
@@ -3991,6 +4211,7 @@ export default function NarrativeOS() {
   const [corrections, setCorrections] = useState(() => {
     try { const v = storageGet("nos_corrections"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; } catch { return {}; }
   });
+  const [gaps, setGaps] = useState(() => loadGaps());
   const [openCard, setOpenCard] = useState(null);
   const cost = useSessionCost();
   const apiLocked = useApiLock();
@@ -3999,6 +4220,7 @@ export default function NarrativeOS() {
   useEffect(() => { storageSet("nos_cards", cards); }, [cards]);
   useEffect(() => { storageSet("nos_stories", stories); }, [stories]);
   useEffect(() => { storageSet("nos_corrections", corrections); }, [corrections]);
+  useEffect(() => { saveGaps(gaps); }, [gaps]);
 
   // Handle Google OAuth implicit-flow redirect. If the URL hash contains
   // access_token + state=gmail_oauth (set by initiateGmailOAuth), store the
@@ -4121,6 +4343,7 @@ export default function NarrativeOS() {
         {activeTab === "profile" && <ProfileTab profile={profile} setProfile={setProfile} stories={stories} cards={cards} />}
         {activeTab === "prep"    && <InterviewPrepStandalone onNavigate={setActiveTab} />}
         {activeTab === "gmail"   && <GmailTab profile={profile} cards={cards} setCards={setCards} onNavigate={setActiveTab} />}
+        {activeTab === "gaps"    && <GapMonitorTab gaps={gaps} setGaps={setGaps} />}
       </div>
 
       {openCard && (

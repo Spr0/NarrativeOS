@@ -854,6 +854,16 @@ function saveGaps(gaps) {
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 const APIFY_TOKEN       = import.meta.env.VITE_APIFY_TOKEN || "";
 const PROXY_URL         = "/.netlify/functions/claude";
+const LOG_URL           = "/.netlify/functions/log";
+
+function logEvent(action, detail) {
+  const email = window.netlifyIdentity?.currentUser()?.email || "unknown";
+  fetch(LOG_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, action, detail }),
+  }).catch(() => {});
+}
 
 async function getAuthToken() {
   const user = window.netlifyIdentity?.currentUser();
@@ -1617,7 +1627,7 @@ function useNetlifyAuth() {
     const ni = window.netlifyIdentity;
     if (!ni) { setAuthLoading(false); return; }
     const onInit   = (u) => { setUser(u); setAuthLoading(false); };
-    const onLogin  = (u) => { setUser(u); setAuthLoading(false); ni.close(); };
+    const onLogin  = (u) => { setUser(u); setAuthLoading(false); ni.close(); logEvent("login", u?.email); };
     const onLogout = ()  => { setUser(null); setAuthLoading(false); };
     ni.on("init", onInit); ni.on("login", onLogin); ni.on("logout", onLogout);
     if (ni.currentUser) { setUser(ni.currentUser()); setAuthLoading(false); }
@@ -1787,6 +1797,7 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
     setParsedScore(p.score); setParsedRationale(p.rationale); setParsedGaps(p.gaps || []);
     setFitSession({ company: p.company || "", role: p.role || "" });
     setFullResult(formatFull(p));
+    logEvent("fit analysis", `${p.company || "?"} — ${p.role || "?"} — score ${p.score}`);
     return p;
   };
 
@@ -2051,6 +2062,7 @@ function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant
       setPhase("Rendering resume...");
       const final = await buildFinalResumeText(baseResume, strat, jd, resumeType);
       setFinalResume(final);
+      logEvent("resume build", `${effectiveCompany || "?"} — ${role || "?"} — ${resumeType}`);
       if (onSaveToCard) onSaveToCard(final, resumeType);
       setPhase("Building DOCX...");
       const b = await buildResumeDocxBlob(final, effectiveCompany, profile);
@@ -2107,10 +2119,14 @@ Omission is always safer than invention.`,
     setTimeout(() => setVariantSaved(false), 2500);
   }
 
+  const dlDocx = () => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.docx`; a.click(); };
+  const dlPdf  = () => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.pdf`; a.click(); };
+
   return (
     <div style={S.tab}>
+      {/* ── Format selector ── */}
       <div style={S.label}>Resume Format</div>
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
         {RESUME_TYPES.map(rt => (
           <button key={rt.id} onClick={() => setResumeType(rt.id)} style={{
             padding: "8px 14px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", border: "1px solid",
@@ -2122,10 +2138,18 @@ Omission is always safer than invention.`,
           </button>
         ))}
       </div>
-      <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "20px", lineHeight: 1.5, padding: "10px 14px", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "6px" }}>
+      <div style={{ fontSize: "12px", color: "#6a6880", marginBottom: "16px", lineHeight: 1.5, padding: "10px 14px", background: "rgba(201,168,76,0.05)", border: "1px solid rgba(201,168,76,0.15)", borderRadius: "6px" }}>
         {RESUME_TYPES.find(r => r.id === resumeType)?.desc}
       </div>
-      {effectiveCompany && <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "12px" }}>Target: <span style={{ color: "#8a85a0" }}>{role} @ {effectiveCompany}</span></div>}
+
+      {/* ── Target context ── */}
+      {effectiveCompany && (
+        <div style={{ fontSize: "12px", color: "#4a4860", marginBottom: "12px", padding: "6px 10px", background: "rgba(255,255,255,0.02)", borderRadius: "5px", border: "1px solid #2a2840" }}>
+          Target: <span style={{ color: "#a09ab8", fontWeight: 600 }}>{role}{role && effectiveCompany ? " \u2014 " : ""}{effectiveCompany}</span>
+        </div>
+      )}
+
+      {/* ── Company prompt (when missing) ── */}
       {showCompanyInput && (
         <div style={{ background: "rgba(201,168,76,0.07)", border: "1px solid rgba(201,168,76,0.35)", borderRadius: "7px", padding: "12px 14px", marginBottom: "14px" }}>
           <div style={{ fontSize: "11px", color: "#c9a84c", marginBottom: "6px", fontWeight: 600 }}>Enter company name for the file</div>
@@ -2142,49 +2166,44 @@ Omission is always safer than invention.`,
           </div>
         </div>
       )}
-      <button onClick={run} disabled={loading || !baseResume} style={{ ...S.btn, marginBottom: "20px", opacity: loading || !baseResume ? 0.5 : 1, display: "flex", alignItems: "center", gap: "8px" }}>
+
+      {/* ── Build button ── */}
+      <button onClick={run} disabled={loading || !baseResume} style={{ ...S.btn, width: "100%", marginBottom: "16px", opacity: loading || !baseResume ? 0.5 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
         {loading ? <><Spinner /> {phase}</> : `Build ${RESUME_TYPES.find(r => r.id === resumeType)?.label} Resume`}
       </button>
       {error && <div style={{ color: "#c06060", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
-      {strategy && (
-        <div style={{ ...S.section, marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-            <div style={S.label}>Strategy</div>
-            <CopyBtn text={strategy} />
-          </div>
-          <div style={{ ...S.resultBox, maxHeight: "200px", overflowY: "auto" }}>{strategy}</div>
-        </div>
-      )}
+
+      {/* ── Resume output ── */}
       {finalResume && (
         <div style={S.section}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-            <div style={S.label}>Final Resume</div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <CopyBtn text={finalResume} />
-              {onAddVariant && (
-                <button
-                  onClick={saveAsVariant}
-                  title={`Save as "${suggestVariantName()}"`}
-                  style={{ ...S.btnGhost, color: variantSaved ? "#4ade80" : "#8880b8", borderColor: variantSaved ? "#4ade80" : undefined }}
-                >
-                  {variantSaved ? "\u2713 Saved" : "+ Variant"}
-                </button>
-              )}
-              {blob && <SaveToDriveBtn blob={blob} filename={`${resumeFilename(profile, effectiveCompany)}.docx`} onSaved={() => setSaved(true)} disabled={!driveToken} folderName={RESUMES_FOLDER_NAME} userEmail={profile.email} />}
-              {blob && (
-                <button onClick={() => { const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.docx`; a.click(); }} style={S.btnGhost}>DOCX</button>
-              )}
-              {pdfBlob && (
-                <button onClick={() => { const u = URL.createObjectURL(pdfBlob); const a = document.createElement("a"); a.href = u; a.download = `${resumeFilename(profile, effectiveCompany)}.pdf`; a.click(); }} style={S.btnGhost}>PDF</button>
-              )}
-            </div>
+          <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Resume</div>
+
+          {/* resume text — full height, page scrolls */}
+          <div style={{ ...S.resultBox, maxHeight: "none" }}>{finalResume}</div>
+
+          {/* ── Action bar (below the text so it's right there when done reading) ── */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginTop: "12px", padding: "10px 12px", background: "rgba(255,255,255,0.025)", border: "1px solid #2a2840", borderRadius: "7px" }}>
+            <CopyBtn text={finalResume} />
+            {onAddVariant && (
+              <button
+                onClick={saveAsVariant}
+                title={`Save as "${suggestVariantName()}"`}
+                style={{ ...S.btnGhost, color: variantSaved ? "#4ade80" : "#8880b8", borderColor: variantSaved ? "rgba(74,222,128,0.4)" : undefined }}
+              >
+                {variantSaved ? "\u2713 Saved" : "+ Variant"}
+              </button>
+            )}
+            {blob && <SaveToDriveBtn blob={blob} filename={`${resumeFilename(profile, effectiveCompany)}.docx`} onSaved={() => setSaved(true)} disabled={!driveToken} folderName={RESUMES_FOLDER_NAME} userEmail={profile.email} />}
+            {blob && <button onClick={dlDocx} style={S.btnGhost}>&#8595; DOCX</button>}
+            {pdfBlob && <button onClick={dlPdf} style={S.btnGhost}>&#8595; PDF</button>}
+            {saved && <span style={{ fontSize: "11px", color: "#4ade80", marginLeft: "auto" }}>\u2713 Saved to Drive</span>}
           </div>
-          <div style={S.resultBox}>{finalResume}</div>
-          {saved && <div style={{ fontSize: "11px", color: "#4ade80", marginTop: "8px" }}>Saved to Google Drive</div>}
-          <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
+
+          {/* ── Refine ── */}
+          <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
             <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Refine</div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Make the opener more direct, add the $28M EBITDA number..." style={{ ...S.input, flex: 1, fontSize: "12px" }} />
+              <input value={feedback} onChange={e => setFeedback(e.target.value)} onKeyDown={e => e.key === "Enter" && refine()} placeholder="e.g. Lead with the P&amp;L scope, tighten the opener..." style={{ ...S.input, flex: 1, fontSize: "12px" }} />
               <button onClick={refine} disabled={refining || !feedback.trim()} style={{ ...S.btn, fontSize: "12px", padding: "8px 14px", opacity: refining || !feedback.trim() ? 0.5 : 1 }}>
                 {refining ? <Spinner size={12} /> : "Apply"}
               </button>
@@ -2230,6 +2249,7 @@ function CoverLetterTab({ profile, card, jd, stories = [], onSaveToCard }) {
         1000
       );
       setLetter(result);
+      logEvent("cover letter", `${effectiveCompany || "?"} — ${role || "?"}`);
       const b = await buildCoverLetterDocxBlob(result, effectiveCompany, role, profile);
       setBlob(b);
       const pb = await buildPdfBlob(result);
@@ -2568,6 +2588,7 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
       if (!jsonMatch) throw new Error("Response was not valid JSON. Try again.");
       const parsed = JSON.parse(jsonMatch[0]);
       setPrepData(parsed);
+      logEvent("interview prep", `${company || "?"} — ${role || "?"} — depth ${depth}`);
       const txt = prepToText(parsed);
       setRawText(txt);
       const db = await buildPrepBriefDocx(parsed, profile);
@@ -3254,6 +3275,12 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   const [jdExpanded, setJdExpanded] = useState(false);
   const [showFollowUps, setShowFollowUps] = useState(false);
   const [fuForm, setFuForm] = useState({ type: "email", notes: "" });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function deleteCard() {
+    setCards(prev => prev.filter(c => c.id !== card.id));
+    onClose();
+  }
 
   // Keep a ref to onClose so the popstate listener doesn't get a stale closure
   const onCloseRef = useRef(onClose);
@@ -3351,6 +3378,15 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginLeft: "12px" }}>
             {hasSent && <button onClick={() => setShowSent(v => !v)} style={{ fontSize: "10px", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>What I Sent</button>}
+            {confirmDelete ? (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                <span style={{ fontSize: "11px", color: "#c06060" }}>Delete role?</span>
+                <button onClick={deleteCard} style={{ fontSize: "10px", color: "#c06060", background: "rgba(192,96,96,0.12)", border: "1px solid rgba(192,96,96,0.35)", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>Delete</button>
+                <button onClick={() => setConfirmDelete(false)} style={{ fontSize: "10px", color: "#6a6880", background: "none", border: "1px solid #2a2840", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} title="Delete this role" style={{ background: "none", border: "none", color: "#3a3860", fontSize: "14px", cursor: "pointer", lineHeight: 1, padding: "2px 4px" }}>&#128465;</button>
+            )}
             <button onClick={onClose} style={{ background: "none", border: "none", color: "#6a6880", fontSize: "20px", cursor: "pointer", lineHeight: 1 }}>&#10005;</button>
           </div>
         </div>

@@ -319,7 +319,7 @@ Return ONLY a valid JSON object — no markdown, no backticks:
 }`;
   },
 
-  resumeStrategy: (profile, resumeType = "chronological", topStories = []) => {
+  resumeStrategy: (profile, resumeType = "chronological", topStories = [], bundle = null) => {
     const tc = tierContext(profile);
     const profileContext = [
       profile.title && `Title: ${profile.title}`,
@@ -333,6 +333,8 @@ Return ONLY a valid JSON object — no markdown, no backticks:
           `${i + 1}. "${s.title || ""}" [${s.competencies?.join(", ") || ""}]\n   Hook: ${s.hook || ""}\n   Result: ${s.result || ""}\n   Best used for: ${s.useFor || s.why || ""}`
         ).join("\n\n")}\n`
       : "";
+    const bundleBlock = buildBundleBlock(bundle);
+    const verbBlock = verbDisciplineBlock(topStories);
 
     const typeGuidance = resumeType === "hybrid"
       ? `RESUME TYPE: HYBRID (Potential-Forward Hankel)
@@ -349,8 +351,7 @@ Strategy should upgrade language per Hankel framework while preserving chronolog
 bulletEdits should add agreeableness signals, upgrade fading vocabulary, and add potential bridges.`;
 
     return `You are a senior executive resume strategist for ${profile.name || "this candidate"}.
-${profileContext}${storiesBlock}
-
+${profileContext}${storiesBlock}${bundleBlock}${verbBlock}
 CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${tc.scope}
 ${tc.expectations}
@@ -454,7 +455,7 @@ ${_PAGE_RULES}
 ${_PROJECTS}`;
   },
 
-  coverLetter: (profile, company, role, notes, toneOverride, topStories = []) => {
+  coverLetter: (profile, company, role, notes, toneOverride, topStories = [], bundle = null) => {
     const tc = tierContext(profile);
     const profileContext = [
       profile.title && `Title: ${profile.title}`,
@@ -468,6 +469,7 @@ ${_PROJECTS}`;
           `${i + 1}. ${s.hook || s.result || ""} [from: "${s.title || ""}"]`
         ).join("\n")}\n`
       : "";
+    const bundleBlock = buildBundleBlock(bundle);
     const TONES = {
       executive: "Boardroom-level voice. Commercially framed. Lead with enterprise impact and financial outcomes. No warmth padding.",
       warm:      "Warm, collaborative tone. Lead with mission alignment and team contribution. Genuine enthusiasm without being sycophantic.",
@@ -483,8 +485,7 @@ The letter is written in the candidate's first-person voice, addressing the empl
 Use "I" / "my" / "I've" when referring to the candidate's experience. Use "you" / "your team" / "the company" / "${company || "your organization"}" when referring to the employer.
 Do NOT write this as a letter addressed TO the candidate (second-person narration about them). The candidate IS the author.
 
-${profileContext}${storiesBlock}
-
+${profileContext}${storiesBlock}${bundleBlock}
 CANDIDATE LEVEL: ${profile.profileTier || "senior"}
 ${voiceInstruction}
 ${tc.scope}
@@ -753,6 +754,119 @@ If isRecruiter is false, all other fields may be empty strings.`,
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. GLOBAL STATE
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UTILITY FUNCTIONS (role bundles, fingerprint, verb discipline)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ROLE_BUNDLES = {
+  "transformation": {
+    label: "Director/VP — Transformation & Change",
+    positioningStrategy: "Lead with portfolio rationalization scale and measurable EBITDA/cost outcomes. Frame technology as an enabler of business transformation, not an end in itself.",
+    summaryGuide: "Open with scope (number of initiatives, dollar value, org size). Follow with the transformation method. Close with the outcome metric.",
+    achievementPriority: [
+      "CD3 portfolio rationalization — $28M EBITDA, 73→15 initiatives",
+      "ERP replacement — $6.8M, 18 months, 40% financial close reduction",
+      "AI contract automation — $2M annualized EBITDA",
+      "Digital Catalog — $13M spend mapped, reduced to $11M",
+      "RPA strategy — $4.8M SG&A reduction",
+    ],
+    leadSkills: ["Portfolio Management", "P&L Ownership", "Agile Transformation", "Stakeholder Influence"],
+    clKeywords: ["transformation", "portfolio", "EBITDA", "rationalization", "cost reduction"],
+    antiPatterns: ["avoid leading with tools/tech stack", "don't open with team size alone"],
+  },
+  "technology_leadership": {
+    label: "VP/Director — Technology Leadership",
+    positioningStrategy: "Lead with P&L ownership and full-stack technology accountability. Emphasize build/buy/partner decisions and enterprise architecture outcomes.",
+    summaryGuide: "Open with P&L scope and org size. Follow with the technology transformation angle. Close with a business outcome.",
+    achievementPriority: [
+      "ERP replacement — $6.8M, Snowflake/Tableau/Sigma, 40% financial close reduction",
+      "Digital Catalog — $13M software spend rationalized",
+      "CD3 portfolio rationalization — $28M EBITDA",
+      "AI contract automation — $2M annualized EBITDA",
+      "RPA strategy — $4.8M SG&A reduction",
+    ],
+    leadSkills: ["P&L Ownership", "Enterprise Architecture", "Cloud/Data Platforms", "Vendor Management"],
+    clKeywords: ["technology strategy", "digital transformation", "architecture", "platform", "data"],
+    antiPatterns: ["avoid framing as pure PM role", "don't omit P&L ownership"],
+  },
+  "portfolio_pmo": {
+    label: "Director — Portfolio / PMO",
+    positioningStrategy: "Lead with the scale of portfolio managed and the rationalization/prioritization method. Emphasize governance, Cost of Delay thinking, and measurable throughput improvements.",
+    summaryGuide: "Open with portfolio scale (# initiatives, $ value). Follow with the governance/prioritization method. Close with delivery outcome or EBITDA impact.",
+    achievementPriority: [
+      "CD3 portfolio rationalization — 73→15 initiatives, $28M EBITDA",
+      "ERP replacement — on-time, on-budget delivery",
+      "Stakeholder influence — converted resistant VP",
+      "Digital Catalog — portfolio visibility from scratch",
+      "AI contract automation — initiative delivery, $2M outcome",
+    ],
+    leadSkills: ["Portfolio Governance", "Cost of Delay / CD3", "Agile at Scale", "Executive Reporting"],
+    clKeywords: ["portfolio", "governance", "prioritization", "PMO", "delivery"],
+    antiPatterns: ["don't lead with tech stack", "avoid underselling P&L experience"],
+  },
+};
+
+function detectBundle(jdText) {
+  const jd = (jdText || "").toLowerCase();
+  if (/transformation|change management|organizational/.test(jd)) return "transformation";
+  if (/chief technology|vp.{0,10}technology|cto|technology leadership/.test(jd)) return "technology_leadership";
+  if (/portfolio|pmo|program management office|governance/.test(jd)) return "portfolio_pmo";
+  return "transformation";
+}
+
+function buildBundleBlock(bundle) {
+  if (!bundle) return "";
+  return `\nROLE BUNDLE: ${bundle.label}
+POSITIONING STRATEGY: ${bundle.positioningStrategy}
+SUMMARY GUIDE: ${bundle.summaryGuide}
+ACHIEVEMENT PRIORITY ORDER:
+${bundle.achievementPriority.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+LEAD SKILLS: ${bundle.leadSkills.join(", ")}
+ANTI-PATTERNS TO AVOID: ${bundle.antiPatterns.join("; ")}\n`;
+}
+
+function verbDisciplineBlock(topStories) {
+  if (!topStories?.length) return "";
+  const levels = topStories.filter(s => s.claimLevel).map(s => `- ${s.title || "Story"}: ${s.claimLevel}`).join("\n");
+  if (!levels) return "";
+  return `\nVERB DISCIPLINE — enforce strictly, no exceptions:
+| Claim Level | Allowed Lead Verbs                        | Never Use                        |
+|-------------|-------------------------------------------|----------------------------------|
+| owned       | Led, Drove, Owned, Delivered, Architected | Contributed to, Assisted, Helped |
+| co-led      | Co-led, Partnered, Collaborated           | Led, Owned, Drove solo           |
+| supported   | Supported, Contributed, Assisted          | Led, Owned, Drove                |
+| contributed | Contributed, Participated                 | Led, Owned, Drove, Co-led        |
+
+Current story claim levels:
+${levels}\n`;
+}
+
+export function fingerprintCheck(text) {
+  const warnings = [];
+  const bannedWords = [
+    "utilize", "leverage", "spearhead", "spearheaded",
+    "dynamic", "robust", "innovative", "synergy", "synergize",
+    "impactful", "results-driven", "proven track record",
+    "passionate about", "detail-oriented", "thought leader",
+    "game-changer", "move the needle", "best-in-class",
+    "holistic", "cutting-edge", "best practices",
+  ];
+  bannedWords.forEach(word => {
+    if (text.toLowerCase().includes(word)) warnings.push(`Banned word: "${word}"`);
+  });
+  const bullets = text.split("\n").filter(l => l.trim().startsWith("•") || l.trim().startsWith("-"));
+  const verbStarts = bullets.map(b => b.trim().replace(/^[•\-]\s*/, "").split(" ")[0].toLowerCase());
+  const verbCounts = verbStarts.reduce((acc, v) => ({ ...acc, [v]: (acc[v] || 0) + 1 }), {});
+  Object.entries(verbCounts).forEach(([verb, count]) => {
+    if (count >= 3) warnings.push(`Repetitive verb: "${verb}" used ${count} times`);
+  });
+  if (/\bwas responsible for\b/i.test(text)) warnings.push('Weak phrasing: "was responsible for"');
+  if (/\bhelped to\b/i.test(text)) warnings.push('Weak phrasing: "helped to"');
+  if (/\bassisted (in|with)\b/i.test(text)) warnings.push('Weak phrasing: "assisted in/with"');
+  const score = Math.max(0, Math.round(100 - warnings.length * (100 / Math.max(warnings.length + 3, 5))));
+  return { passed: warnings.length === 0, warningCount: warnings.length, warnings, score };
+}
 
 let _sessionCost = 0;
 const _costListeners = new Set();
@@ -2028,7 +2142,7 @@ function resumeFilename(profile, company) {
 // RESUME TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant }) {
+function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant, onLogDecision }) {
   const [resumeType, setResumeType] = useState(card?.resumeType || "chronological");
   const [strategy, setStrategy] = useState("");
   const [finalResume, setFinalResume] = useState(card?.resumeText || "");
@@ -2043,6 +2157,11 @@ function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant
   const [companyOverride, setCompanyOverride] = useState("");
   const [showCompanyInput, setShowCompanyInput] = useState(false);
   const [variantSaved, setVariantSaved] = useState(false);
+  const [fingerprintResult, setFingerprintResult] = useState(null);
+  const [fingerprintOpen, setFingerprintOpen] = useState(false);
+  const [critiqueResult, setCritiqueResult] = useState(null);
+  const [critiquing, setCritiquing] = useState(false);
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
 
   const baseResume = getActiveResume(profile);
   const company = card?.company || "";
@@ -2054,21 +2173,33 @@ function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant
     if (!baseResume) { setError("Upload a resume in Profile first."); return; }
     if (!effectiveCompany) { setShowCompanyInput(true); return; }
     setShowCompanyInput(false);
-    setLoading(true); setError(""); setStrategy(""); setFinalResume(""); setBlob(null); setPdfBlob(null); setFeedback("");
+    setLoading(true); setError(""); setStrategy(""); setFinalResume(""); setBlob(null); setPdfBlob(null); setFeedback(""); setFingerprintResult(null); setCritiqueResult(null);
     try {
+      const bundleName = detectBundle(jd);
+      const bundle = ROLE_BUNDLES[bundleName] || null;
+      if (onLogDecision) onLogDecision("bundle_detected", bundleName, `JD matched '${bundleName}' pattern`);
+
       let topStories = [];
       if (stories?.length && jd?.trim()) {
         setPhase("Matching top stories...");
         topStories = await matchTopStories(stories, jd);
+        if (onLogDecision && topStories.length > 0) {
+          onLogDecision("stories_ranked", topStories.map(s => s.title || s.id), "Top stories selected by bundle achievement priority");
+        }
       }
       setPhase("Building strategy...");
-      const strat = await callClaude(PROMPTS.resumeStrategy(profile, resumeType, topStories), `JD:\n${jd || "(none)"}\n\nBase resume:\n${baseResume}`, 1200);
+      const strat = await callClaude(PROMPTS.resumeStrategy(profile, resumeType, topStories, bundle), `JD:\n${jd || "(none)"}\n\nBase resume:\n${baseResume}`, 1200);
       setStrategy(strat);
       setPhase("Rendering resume...");
       const final = await buildFinalResumeText(baseResume, strat, jd, resumeType);
       setFinalResume(final);
+      if (onLogDecision) onLogDecision("generation_complete", { model: "claude-sonnet-4-6" }, null);
       logEvent("resume build", `${effectiveCompany || "?"} — ${role || "?"} — ${resumeType}`);
-      if (onSaveToCard) onSaveToCard(final, resumeType);
+      if (onSaveToCard) onSaveToCard(final, resumeType, { detectedBundle: bundleName });
+      setPhase("Checking fingerprint...");
+      const fp = fingerprintCheck(final);
+      setFingerprintResult(fp);
+      if (onLogDecision) onLogDecision("fingerprint_check", { warningCount: fp.warningCount, warnings: fp.warnings }, null);
       setPhase("Building DOCX...");
       const b = await buildResumeDocxBlob(final, effectiveCompany, profile);
       setBlob(b);
@@ -2102,6 +2233,22 @@ Omission is always safer than invention.`,
       setPdfBlob(pb);
     } catch (e) { setError(String(e)); }
     setRefining(false);
+  }
+
+  async function runCritique() {
+    if (!finalResume || !jd?.trim()) return;
+    setCritiquing(true); setCritiqueOpen(true);
+    try {
+      const res = await fetch("/.netlify/functions/critique", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: finalResume, jdText: jd }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setCritiqueResult(data);
+    } catch (e) { setError(`Critique error: ${String(e)}`); }
+    setCritiquing(false);
   }
 
   // Auto-name a variant from the target context. Fallbacks keep the label
@@ -2204,6 +2351,80 @@ Omission is always safer than invention.`,
             {saved && <span style={{ fontSize: "11px", color: "#4ade80", marginLeft: "auto" }}>\u2713 Saved to Drive</span>}
           </div>
 
+          {/* ── Fingerprint check panel ── */}
+          {fingerprintResult && (
+            <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: fingerprintResult.passed ? "#4ade80" : "#f59e0b" }}>
+                    AI Fingerprint
+                  </span>
+                  <span style={{ fontSize: "11px", padding: "1px 8px", borderRadius: "10px", background: fingerprintResult.passed ? "rgba(74,222,128,0.1)" : "rgba(245,158,11,0.1)", border: `1px solid ${fingerprintResult.passed ? "rgba(74,222,128,0.3)" : "rgba(245,158,11,0.35)"}`, color: fingerprintResult.passed ? "#4ade80" : "#f59e0b" }}>
+                    Score: {fingerprintResult.score}/100
+                  </span>
+                  {fingerprintResult.warningCount > 0 && (
+                    <span style={{ fontSize: "11px", color: "#f59e0b" }}>{fingerprintResult.warningCount} warning{fingerprintResult.warningCount > 1 ? "s" : ""}</span>
+                  )}
+                </div>
+                {fingerprintResult.warningCount > 0 && (
+                  <button onClick={() => setFingerprintOpen(v => !v)} style={{ background: "none", border: "none", color: "#c9a84c", fontSize: "10px", cursor: "pointer" }}>
+                    {fingerprintOpen ? "Hide" : "Show"}
+                  </button>
+                )}
+              </div>
+              {fingerprintOpen && fingerprintResult.warnings.length > 0 && (
+                <ul style={{ margin: "6px 0 0 0", padding: "0 0 0 16px", fontSize: "11px", color: "#8a85a0", lineHeight: 1.8 }}>
+                  {fingerprintResult.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* ── Critique button ── */}
+          {finalResume && (
+            <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: critiqueResult ? "12px" : 0 }}>
+                <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#8a85a0" }}>Multi-Perspective Critique</span>
+                <button onClick={runCritique} disabled={critiquing} style={{ ...S.btnGhost, fontSize: "10px", padding: "3px 10px", opacity: critiquing ? 0.5 : 1 }}>
+                  {critiquing ? <><Spinner size={10} /> Running...</> : critiqueResult ? "Re-run" : "Critique"}
+                </button>
+              </div>
+              {critiqueResult && (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "#e8e6f0" }}>Total: {critiqueResult.totalScore}/100</span>
+                    <span style={{ fontSize: "11px", color: "#8a85a0" }}>{critiqueResult.interviewLikelihood}</span>
+                    <button onClick={() => setCritiqueOpen(v => !v)} style={{ background: "none", border: "none", color: "#c9a84c", fontSize: "10px", cursor: "pointer" }}>
+                      {critiqueOpen ? "Collapse" : "Expand"}
+                    </button>
+                  </div>
+                  {critiqueOpen && (
+                    <div>
+                      {Object.entries(critiqueResult.personas || {}).map(([key, p]) => (
+                        <div key={key} style={{ marginBottom: "10px", padding: "10px 12px", background: "rgba(20,20,35,0.5)", borderRadius: "6px", border: "1px solid #2a2840" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "#c9a84c", textTransform: "uppercase", letterSpacing: "0.06em" }}>{key.replace(/_/g, " ")}</span>
+                            <span style={{ fontSize: "12px", fontWeight: 700, color: p.score >= 16 ? "#4ade80" : p.score >= 12 ? "#f59e0b" : "#c06060" }}>{p.score}/20</span>
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#8a85a0", lineHeight: 1.6, marginBottom: "4px" }}>{p.notes}</div>
+                          {p.topGap && <div style={{ fontSize: "10px", color: "#c06060" }}>Gap: {p.topGap}</div>}
+                        </div>
+                      ))}
+                      {critiqueResult.topFixes?.length > 0 && (
+                        <div style={{ padding: "10px 12px", background: "rgba(201,168,76,0.05)", borderRadius: "6px", border: "1px solid rgba(201,168,76,0.2)" }}>
+                          <div style={{ fontSize: "10px", fontWeight: 700, color: "#c9a84c", textTransform: "uppercase", marginBottom: "6px" }}>Top Fixes</div>
+                          <ol style={{ margin: 0, padding: "0 0 0 16px", fontSize: "11px", color: "#8a85a0", lineHeight: 1.8 }}>
+                            {critiqueResult.topFixes.map((fix, i) => <li key={i}>{fix}</li>)}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Refine ── */}
           <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #2a2840" }}>
             <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Refine</div>
@@ -2224,7 +2445,7 @@ Omission is always safer than invention.`,
 // COVER LETTER TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function CoverLetterTab({ profile, card, jd, stories = [], onSaveToCard }) {
+function CoverLetterTab({ profile, card, jd, stories = [], onSaveToCard, onLogDecision }) {
   const [letter, setLetter] = useState(card?.coverLetterText || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -2247,13 +2468,20 @@ function CoverLetterTab({ profile, card, jd, stories = [], onSaveToCard }) {
     setShowCompanyInput(false);
     setLoading(true); setError(""); setLetter(""); setBlob(null); setPdfBlob(null); setFeedback(""); setAddedToCard(false);
     try {
+      const bundleName = detectBundle(jd);
+      const bundle = ROLE_BUNDLES[bundleName] || null;
+      if (onLogDecision) onLogDecision("bundle_detected", bundleName, `Cover letter: JD matched '${bundleName}' pattern`);
       const topStories = (stories?.length && jd?.trim()) ? await matchTopStories(stories, jd) : [];
+      if (onLogDecision && topStories.length > 0) {
+        onLogDecision("stories_ranked", topStories.map(s => s.title || s.id), "Cover letter: stories matched to JD");
+      }
       const result = await callClaude(
-        PROMPTS.coverLetter(profile, effectiveCompany, role, jd || "", null, topStories),
+        PROMPTS.coverLetter(profile, effectiveCompany, role, jd || "", null, topStories, bundle),
         `Base resume:\n${base}\n\nJD:\n${jd || "(none)"}`,
         1000
       );
       setLetter(result);
+      if (onLogDecision) onLogDecision("generation_complete", { type: "cover_letter", model: "claude-sonnet-4-6" }, null);
       logEvent("cover letter", `${effectiveCompany || "?"} — ${role || "?"}`);
       const b = await buildCoverLetterDocxBlob(result, effectiveCompany, role, profile);
       setBlob(b);
@@ -2901,7 +3129,12 @@ function StoryCard({ story, onEdit, onDelete }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div style={{ flex: 1, cursor: "pointer" }} onClick={() => setExpanded(e => !e)}>
           <div style={{ fontWeight: 600, fontSize: "13px", color: "#e8e6f0", marginBottom: "4px" }}>{story.hook || "Untitled story"}</div>
-          <div style={{ fontSize: "11px", color: "#4a4860" }}>{story.tags?.join(" · ")}</div>
+          <div style={{ fontSize: "11px", color: "#4a4860", display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+            {story.tags?.join(" · ")}
+            {story.claimLevel && story.claimLevel !== "owned" && (
+              <span style={{ fontSize: "9px", padding: "1px 6px", borderRadius: "8px", background: "rgba(201,168,76,0.1)", border: "1px solid rgba(201,168,76,0.3)", color: "#c9a84c", textTransform: "uppercase", letterSpacing: "0.05em" }}>{story.claimLevel}</span>
+            )}
+          </div>
         </div>
         <div style={{ display: "flex", gap: "6px" }}>
           <button onClick={() => onEdit(story)} style={{ ...S.btnGhost, fontSize: "11px", padding: "3px 8px" }}>Edit</button>
@@ -2920,8 +3153,15 @@ function StoryCard({ story, onEdit, onDelete }) {
   );
 }
 
+const CLAIM_LEVELS = [
+  { id: "owned",       label: "Owned",       verbs: "Led, Drove, Owned, Delivered, Architected" },
+  { id: "co-led",      label: "Co-Led",      verbs: "Co-led, Partnered, Collaborated" },
+  { id: "supported",   label: "Supported",   verbs: "Supported, Contributed, Assisted" },
+  { id: "contributed", label: "Contributed", verbs: "Contributed, Participated" },
+];
+
 function StoryEditor({ story, onSave, onCancel }) {
-  const [form, setForm] = useState(story || { id: generateId(), hook: "", situation: "", task: "", action: "", result: "", tags: [] });
+  const [form, setForm] = useState(story || { id: generateId(), hook: "", situation: "", task: "", action: "", result: "", tags: [], claimLevel: "owned" });
   const [aiLoading, setAiLoading] = useState(false);
   const [tagLoading, setTagLoading] = useState(false);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -3010,6 +3250,19 @@ Return JSON: { "tags": ["Tag1", "Tag2", ...] }. No commentary.`,
           ))}
         </div>
       )}
+      <div style={{ marginBottom: "14px" }}>
+        <div style={{ fontSize: "10px", color: "#4a4860", textTransform: "uppercase", marginBottom: "6px" }}>Claim Level</div>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {CLAIM_LEVELS.map(cl => (
+            <button key={cl.id} onClick={() => setForm(f => ({ ...f, claimLevel: cl.id }))} style={{ fontSize: "10px", padding: "3px 10px", borderRadius: "10px", border: "1px solid", cursor: "pointer", borderColor: form.claimLevel === cl.id ? "#c9a84c" : "#2a2840", background: form.claimLevel === cl.id ? "rgba(201,168,76,0.12)" : "transparent", color: form.claimLevel === cl.id ? "#c9a84c" : "#6a6880" }}>
+              {cl.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: "10px", color: "#4a4860", marginTop: "4px" }}>
+          Lead verbs: <span style={{ color: "#6a6880" }}>{CLAIM_LEVELS.find(cl => cl.id === (form.claimLevel || "owned"))?.verbs}</span>
+        </div>
+      </div>
       <div style={{ display: "flex", gap: "8px" }}>
         <button onClick={() => onSave(form)} style={S.btn}>Save</button>
         <button onClick={onCancel} style={S.btnGhost}>Cancel</button>
@@ -3245,6 +3498,50 @@ function ProfileTab({ profile, setProfile, stories = [], cards = [] }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DECISION LOG TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DECISION_LOG_LABELS = {
+  bundle_detected:     { label: "Bundle Detected",     color: "#c9a84c" },
+  stories_ranked:      { label: "Stories Ranked",      color: "#c084fc" },
+  generation_complete: { label: "Generation Complete", color: "#4ade80" },
+  fingerprint_check:   { label: "Fingerprint Check",   color: "#f59e0b" },
+};
+
+function DecisionLogTab({ log }) {
+  if (!log.length) {
+    return (
+      <div style={{ ...S.tab, textAlign: "center", color: "#3a3860", fontSize: "13px", paddingTop: "30px" }}>
+        No decisions logged yet. Build a resume to start the audit trail.
+      </div>
+    );
+  }
+  return (
+    <div style={S.tab}>
+      <div style={S.label}>Decision Log</div>
+      <div style={{ fontSize: "11px", color: "#4a4860", marginBottom: "14px" }}>Append-only audit trail for this application.</div>
+      {[...log].reverse().map((entry, i) => {
+        const meta = DECISION_LOG_LABELS[entry.event] || { label: entry.event, color: "#6a6880" };
+        const valueStr = typeof entry.value === "object" ? JSON.stringify(entry.value, null, 2) : Array.isArray(entry.value) ? entry.value.join(", ") : String(entry.value ?? "");
+        return (
+          <div key={i} style={{ display: "flex", gap: "12px", marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid #1a1830" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: meta.color, flexShrink: 0, marginTop: "4px" }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 700, color: meta.color, textTransform: "uppercase", letterSpacing: "0.06em" }}>{meta.label}</span>
+                <span style={{ fontSize: "10px", color: "#4a4860", flexShrink: 0, marginLeft: "8px" }}>{new Date(entry.timestamp).toLocaleTimeString()}</span>
+              </div>
+              <div style={{ fontSize: "11px", color: "#8a85a0", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{valueStr}</div>
+              {entry.detail && <div style={{ fontSize: "10px", color: "#4a4860", marginTop: "2px" }}>{entry.detail}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ROLE WORKSPACE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3305,9 +3602,17 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
     updateCard({ jd, ...(url ? { jdUrl: url } : {}) });
   }, [jd]);
 
-  function onSaveResume(resumeText, resumeType) { updateCard({ resumeText, resumeType }); }
+  function onSaveResume(resumeText, resumeType, extra = {}) { updateCard({ resumeText, resumeType, ...extra }); }
   function setProfileFromWorkspace(updates) { if (setProfile) setProfile(p => ({ ...p, ...updates })); }
-  function onSaveCoverLetter(coverLetterText) { updateCard({ coverLetterText }); }
+  function onSaveCoverLetter(coverLetterText, extra = {}) { updateCard({ coverLetterText, ...extra }); }
+
+  function logDecisionEntry(event, value, detail = null) {
+    setCards(prev => prev.map(c => {
+      if (c.id !== card.id) return c;
+      const log = Array.isArray(c.decisionLog) ? c.decisionLog : [];
+      return { ...c, decisionLog: [...log, { timestamp: new Date().toISOString(), event, value, detail }] };
+    }));
+  }
 
   // Add the refined resume to the profile's variant library with an
   // auto-suggested name, and activate it. De-dupes if a variant with the same
@@ -3331,6 +3636,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
     { id: "cover",    label: "Cover Letter" },
     { id: "prep",     label: "Interview Prep" },
     { id: "research", label: "Research" },
+    { id: "log",      label: "Log" },
   ];
 
   return (
@@ -3474,10 +3780,11 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
         ))}
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveResume} onAddVariant={onAddVariant} />}
-        {activeTab === "cover"    && <CoverLetterTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveCoverLetter} />}
+        {activeTab === "resume"   && <ResumeTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveResume} onAddVariant={onAddVariant} onLogDecision={logDecisionEntry} />}
+        {activeTab === "cover"    && <CoverLetterTab profile={profile} card={liveCard} jd={jd} stories={stories} onSaveToCard={onSaveCoverLetter} onLogDecision={logDecisionEntry} />}
         {activeTab === "prep"     && <InterviewPrepTab profile={profile} card={liveCard} jd={jd} stories={stories} onUpdateCard={updateCard} onUpdateProfile={p => setProfileFromWorkspace(p)} />}
         {activeTab === "research" && <ResearchTab profile={profile} card={liveCard} jd={jd} onUpdateCard={updateCard} />}
+        {activeTab === "log"      && <DecisionLogTab log={Array.isArray(liveCard.decisionLog) ? liveCard.decisionLog : []} />}
       </div>
     </div>
   );

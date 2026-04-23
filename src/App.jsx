@@ -1675,8 +1675,11 @@ function AnalysisModal({ score, rationale, gaps, onTrackBuildResume, onInterview
                  { label: "Tough Road Ahead", color: "#f87171", rec: "Significant gaps. Correct any AI errors below." };
   return (
     <div onClick={onDismiss} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.82)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: "#181a2e", border: "1px solid rgba(100,100,200,0.25)", borderRadius: "14px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", padding: "32px", boxShadow: "0 24px 80px rgba(0,0,0,0.7)", position: "relative" }}>
-        <button onClick={onDismiss} style={{ position: "absolute", top: "14px", right: "14px", background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", color: "#a0a0c0", fontSize: "15px" }}>&#10005;</button>
+      <div onClick={e => e.stopPropagation()} style={{ background: "#181a2e", border: "1px solid rgba(100,100,200,0.25)", borderRadius: "14px", width: "100%", maxWidth: "600px", maxHeight: "90vh", overflowY: "auto", padding: "0", boxShadow: "0 24px 80px rgba(0,0,0,0.7)", position: "relative" }}>
+        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#181a2e", borderBottom: "1px solid rgba(100,100,200,0.15)", padding: "12px 16px", display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={onDismiss} style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: "50%", width: "30px", height: "30px", cursor: "pointer", color: "#a0a0c0", fontSize: "15px" }}>&#10005;</button>
+        </div>
+        <div style={{ padding: "24px 32px 32px" }}>
         <div style={{ textAlign: "center", marginBottom: "24px" }}>
           <div style={{ fontSize: "76px", fontWeight: 800, lineHeight: 1, color: verdict.color, letterSpacing: "-2px" }}>{score}<span style={{ fontSize: "28px", color: "#6060a0", fontWeight: 400 }}>/10</span></div>
           <div style={{ fontSize: "18px", fontWeight: 700, color: verdict.color, marginTop: "8px" }}>{verdict.label}</div>
@@ -1707,6 +1710,8 @@ function AnalysisModal({ score, rationale, gaps, onTrackBuildResume, onInterview
             <button onClick={onCorrect}    style={{ flex: 1, background: "rgba(74,222,128,0.06)", color: "#6ab8a8", border: "1px solid rgba(74,222,128,0.2)",  borderRadius: "8px", padding: "10px 14px", fontSize: "12px", cursor: "pointer" }}>Correct a Gap</button>
             <button onClick={onNewJD}      style={{ flex: 1, background: "transparent",            color: "#6a6880", border: "1px solid #2a2840",                borderRadius: "8px", padding: "10px 14px", fontSize: "12px", cursor: "pointer" }}>New JD</button>
           </div>
+          <button onClick={onDismiss} style={{ background: "none", border: "none", color: "#6a6880", fontSize: "13px", cursor: "pointer", width: "100%", padding: "10px 0 2px" }}>Close</button>
+        </div>
         </div>
       </div>
     </div>
@@ -3282,23 +3287,6 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
     onClose();
   }
 
-  // Keep a ref to onClose so the popstate listener doesn't get a stale closure
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-
-  // Intercept browser back button — close overlay instead of navigating away
-  // (prevents the "OAuth state is invalid" error from Netlify Identity).
-  // Guard the pushState so opening multiple cards doesn't pollute history.
-  useEffect(() => {
-    if (!window.history.state?.narrativeOverlay) {
-      window.history.pushState({ narrativeOverlay: true }, "");
-    }
-    const handlePop = () => onCloseRef.current && onCloseRef.current();
-    window.addEventListener("popstate", handlePop);
-    return () => {
-      window.removeEventListener("popstate", handlePop);
-    };
-  }, []);
 
   function updateCard(updates) {
     setCards(prev => prev.map(c => {
@@ -3346,7 +3334,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   ];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(8,8,20,0.98)", zIndex: 200, display: "flex", flexDirection: "column" }}>
+    <div style={{ minHeight: "100vh", background: "#080814", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "12px 20px 10px", borderBottom: "1px solid #1a1830", flexShrink: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div style={{ flex: 1 }}>
@@ -3387,7 +3375,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
             ) : (
               <button onClick={() => setConfirmDelete(true)} title="Delete this role" style={{ background: "none", border: "none", color: "#3a3860", fontSize: "14px", cursor: "pointer", lineHeight: 1, padding: "2px 4px" }}>&#128465;</button>
             )}
-            <button onClick={onClose} style={{ background: "none", border: "none", color: "#6a6880", fontSize: "20px", cursor: "pointer", lineHeight: 1 }}>&#10005;</button>
+            <button onClick={onClose} style={{ background: "none", border: "1px solid #2a2840", borderRadius: "4px", color: "#6a6880", fontSize: "11px", cursor: "pointer", padding: "3px 10px" }}>← Tracker</button>
           </div>
         </div>
       </div>
@@ -4146,6 +4134,20 @@ function InterviewPrepStandalone({ onNavigate }) {
 // MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
 
+const NAV_ITEMS = [
+  { id: "dashboard", icon: "\u229e", label: "Home" },
+  { id: "tracker",   icon: "\u2B21", label: "Tracker" },
+  { id: "analyze",   icon: "\u2726", label: "Analyze" },
+  { id: "stories",   icon: "\u25C8", label: "Stories" },
+  { id: "profile",   icon: "\u25C9", label: "Profile" },
+];
+
+const TAB_LABELS = {
+  tracker: "Tracker", analyze: "Analyze Fit", stories: "Stories",
+  profile: "Profile", prep: "Interview Prep", gmail: "Gmail",
+  gaps: "Gap Monitor", workspace: "Role"
+};
+
 export default function NarrativeOS() {
   const { user, loading: authLoading } = useNetlifyAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -4202,6 +4204,7 @@ export default function NarrativeOS() {
     const c = makeCard();
     setCards(prev => [c, ...prev]);
     setOpenCard(c);
+    setActiveTab("workspace");
   }
 
   function handleTrackBuildResume(session) {
@@ -4218,6 +4221,7 @@ export default function NarrativeOS() {
       setCards(prev => [c, ...prev]);
       setOpenCard(c);
     }
+    setActiveTab("workspace");
   }
 
   function handleTrackOnly(session) {
@@ -4268,13 +4272,30 @@ export default function NarrativeOS() {
 
       {drawerOpen && <DrawerNav active={activeTab} onChange={setActiveTab} onClose={() => setDrawerOpen(false)} user={user} />}
 
-      <div style={{ paddingBottom: "20px" }}>
+      <div style={{ paddingBottom: "72px" }}>
+        {activeTab !== "dashboard" && (
+          <div style={{ padding: "6px 16px", borderBottom: "1px solid #1a1830", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#080814", minHeight: "34px" }}>
+            <span style={{ fontSize: "11px", letterSpacing: "0.08em", textTransform: "uppercase", color: "#4a4860", fontWeight: 600 }}>
+              {TAB_LABELS[activeTab]}
+              {activeTab === "workspace" && openCard?.company ? ` · ${openCard.company}` : ""}
+            </span>
+            {activeTab === "analyze" && (
+              <button onClick={() => wipeFitSession()} style={{ fontSize: "11px", color: "#6a6880", background: "none", border: "1px solid #2a2840", borderRadius: "4px", padding: "3px 10px", cursor: "pointer" }}>↺ New JD</button>
+            )}
+            {activeTab === "workspace" && openCard && (
+              <button onClick={() => { setOpenCard(null); setActiveTab("tracker"); }} style={{ fontSize: "11px", color: "#6a6880", background: "none", border: "none", cursor: "pointer" }}>← Tracker</button>
+            )}
+            {activeTab === "tracker" && (
+              <button onClick={addCard} style={{ fontSize: "11px", color: "#c9a84c", background: "rgba(201,168,76,0.08)", border: "1px solid rgba(201,168,76,0.2)", borderRadius: "4px", padding: "3px 10px", cursor: "pointer" }}>+ Add Role</button>
+            )}
+          </div>
+        )}
         {activeTab === "dashboard" && (
           <DashboardTab cards={cards} stories={stories} profile={profile} onNavigate={setActiveTab} />
         )}
         {activeTab === "tracker" && (
           <div style={{ padding: "16px 16px 0" }}>
-            <Board cards={cards} onCardClick={c => setOpenCard(c)} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} onMoveCard={handleMoveCard} />
+            <Board cards={cards} onCardClick={c => { setOpenCard(c); setActiveTab("workspace"); }} onAddCard={addCard} onExport={() => exportTrackerXlsx(cards)} onMoveCard={handleMoveCard} />
           </div>
         )}
         {activeTab === "analyze" && (
@@ -4295,19 +4316,31 @@ export default function NarrativeOS() {
         {activeTab === "prep"    && <InterviewPrepStandalone onNavigate={setActiveTab} />}
         {activeTab === "gmail"   && <GmailTab profile={profile} cards={cards} setCards={setCards} onNavigate={setActiveTab} />}
         {activeTab === "gaps"    && <GapMonitorTab gaps={gaps} setGaps={setGaps} />}
+        {activeTab === "workspace" && openCard && (
+          <RoleWorkspace
+            card={openCard}
+            cards={cards}
+            setCards={setCards}
+            profile={profile}
+            setProfile={setProfile}
+            stories={stories}
+            onClose={() => { setOpenCard(null); setActiveTab("tracker"); }}
+          />
+        )}
       </div>
 
-      {openCard && (
-        <RoleWorkspace
-          card={openCard}
-          cards={cards}
-          setCards={setCards}
-          profile={profile}
-          setProfile={setProfile}
-          stories={stories}
-          onClose={() => setOpenCard(null)}
-        />
-      )}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "rgba(8,8,20,0.97)", borderTop: "1px solid #1a1830", backdropFilter: "blur(10px)", display: "flex", height: "56px", paddingBottom: "env(safe-area-inset-bottom)" }}>
+        {NAV_ITEMS.map(item => (
+          <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: (activeTab === item.id || (item.id === "tracker" && activeTab === "workspace")) ? "#c9a84c" : "#3a3860", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+            <span style={{ fontSize: "18px", lineHeight: 1 }}>{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button onClick={() => setDrawerOpen(true)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: "#3a3860", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+          <span style={{ fontSize: "18px", lineHeight: 1 }}>···</span>
+          <span>More</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -56,7 +56,7 @@ exports.handler = async (event) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: process.env.ANTHROPIC_MODEL,
         max_tokens: 1500,
         system: CRITIQUE_SYSTEM_PROMPT,
         messages: [

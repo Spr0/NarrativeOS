@@ -2247,6 +2247,7 @@ Omission is always safer than invention.`,
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setCritiqueResult(data);
+      if (onLogDecision) onLogDecision("critique_complete", { totalScore: data.totalScore, interviewLikelihood: data.interviewLikelihood }, null);
     } catch (e) { setError(`Critique error: ${String(e)}`); }
     setCritiquing(false);
   }
@@ -3506,6 +3507,7 @@ const DECISION_LOG_LABELS = {
   stories_ranked:      { label: "Stories Ranked",      color: "#c084fc" },
   generation_complete: { label: "Generation Complete", color: "#4ade80" },
   fingerprint_check:   { label: "Fingerprint Check",   color: "#f59e0b" },
+  critique_complete:   { label: "Critique Complete",   color: "#2dd4bf" },
 };
 
 function DecisionLogTab({ log }) {

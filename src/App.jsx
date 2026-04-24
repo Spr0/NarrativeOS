@@ -4478,12 +4478,37 @@ export default function NarrativeOS() {
   const [openCard, setOpenCard] = useState(null);
   const cost = useSessionCost();
   const apiLocked = useApiLock();
+  const hydrating = useRef(false);
+  const syncTimer = useRef(null);
 
-  useEffect(() => { storageSet("nos_profile", profile); }, [profile]);
-  useEffect(() => { storageSet("nos_cards", cards); }, [cards]);
-  useEffect(() => { storageSet("nos_stories", stories); }, [stories]);
-  useEffect(() => { storageSet("nos_corrections", corrections); }, [corrections]);
-  useEffect(() => { saveGaps(gaps); }, [gaps]);
+  function scheduleSync() {
+    if (hydrating.current) return;
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(async () => {
+      const u = window.netlifyIdentity?.currentUser();
+      if (!u) return;
+      const token = await getAuthToken();
+      if (!token) return;
+      const payload = {
+        nos_profile: storageGet("nos_profile"),
+        nos_cards: storageGet("nos_cards"),
+        nos_stories: storageGet("nos_stories"),
+        nos_corrections: storageGet("nos_corrections"),
+        nos_gaps: storageGet("nos_gaps"),
+      };
+      fetch("/.netlify/functions/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    }, 1500);
+  }
+
+  useEffect(() => { storageSet("nos_profile", profile); scheduleSync(); }, [profile]);
+  useEffect(() => { storageSet("nos_cards", cards); scheduleSync(); }, [cards]);
+  useEffect(() => { storageSet("nos_stories", stories); scheduleSync(); }, [stories]);
+  useEffect(() => { storageSet("nos_corrections", corrections); scheduleSync(); }, [corrections]);
+  useEffect(() => { saveGaps(gaps); scheduleSync(); }, [gaps]);
 
   // Handle Google OAuth implicit-flow redirect. If the URL hash contains
   // access_token + state=gmail_oauth (set by initiateGmailOAuth), store the
@@ -4504,6 +4529,38 @@ export default function NarrativeOS() {
       }
     }
   }, []);
+
+  // On login (or first mount with a returning user), pull the remote blob and
+  // hydrate all state. The hydrating guard prevents the write effects above
+  // from echoing the old localStorage data back to the blob during this window.
+  useEffect(() => {
+    if (!user) return;
+    hydrating.current = true;
+    (async () => {
+      try {
+        const token = await getAuthToken();
+        if (!token) { hydrating.current = false; return; }
+        const res = await fetch("/.netlify/functions/sync", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!res.ok) { hydrating.current = false; return; }
+        const data = await res.json();
+        if (!data || Object.keys(data).length === 0) { hydrating.current = false; return; }
+        if (data.nos_profile && typeof data.nos_profile === "object" && !Array.isArray(data.nos_profile)) {
+          setProfile({ ...DEFAULT_PROFILE, ...data.nos_profile });
+        }
+        if (Array.isArray(data.nos_cards)) setCards(data.nos_cards);
+        if (Array.isArray(data.nos_stories)) setStories(data.nos_stories);
+        if (data.nos_corrections && typeof data.nos_corrections === "object" && !Array.isArray(data.nos_corrections)) {
+          setCorrections(data.nos_corrections);
+        }
+        if (Array.isArray(data.nos_gaps) && data.nos_gaps.length > 0) setGaps(data.nos_gaps);
+        setTimeout(() => { hydrating.current = false; }, 200);
+      } catch {
+        hydrating.current = false;
+      }
+    })();
+  }, [user?.email]);
 
   function makeCard(overrides = {}) {
     const stage = overrides.stage || "Considering";

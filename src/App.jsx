@@ -1740,13 +1740,14 @@ function useNetlifyAuth() {
   useEffect(() => {
     const ni = window.netlifyIdentity;
     if (!ni) { setAuthLoading(false); return; }
-    const onInit   = (u) => { setUser(u); setAuthLoading(false); };
-    const onLogin  = (u) => { setUser(u); setAuthLoading(false); ni.close(); logEvent("login", u?.email); };
-    const onLogout = ()  => { setUser(null); setAuthLoading(false); };
-    ni.on("init", onInit); ni.on("login", onLogin); ni.on("logout", onLogout);
-    if (ni.currentUser) { setUser(ni.currentUser()); setAuthLoading(false); }
-    const timeout = setTimeout(() => setAuthLoading(false), 4000);
-    return () => { ni.off("init", onInit); ni.off("login", onLogin); ni.off("logout", onLogout); clearTimeout(timeout); };
+    // main.jsx defers mount until identity "init" fires, so currentUser() is
+    // accurate by the time this hook runs — no need to wait again.
+    setUser(ni.currentUser());
+    setAuthLoading(false);
+    const onLogin  = (u) => { setUser(u); ni.close(); logEvent("login", u?.email); };
+    const onLogout = ()  => { setUser(null); };
+    ni.on("login", onLogin); ni.on("logout", onLogout);
+    return () => { ni.off("login", onLogin); ni.off("logout", onLogout); };
   }, []);
   const login  = () => window.netlifyIdentity?.open("login");
   const logout = () => window.netlifyIdentity?.logout();
@@ -4638,7 +4639,7 @@ export default function NarrativeOS() {
         )}
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "rgba(8,8,20,0.97)", borderTop: "1px solid #1a1830", backdropFilter: "blur(10px)", display: "flex", height: "56px", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "rgba(18,16,36,0.97)", borderTop: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(10px)", display: "flex", height: "56px", paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => (
           <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: (activeTab === item.id || (item.id === "tracker" && activeTab === "workspace")) ? "#c9a84c" : "#3a3860", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
             <span style={{ fontSize: "18px", lineHeight: 1 }}>{item.icon}</span>

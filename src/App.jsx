@@ -4698,12 +4698,12 @@ export default function NarrativeOS() {
 
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, background: "rgba(18,16,36,0.97)", borderTop: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(10px)", display: "flex", height: "56px", paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => (
-          <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: (activeTab === item.id || (item.id === "tracker" && activeTab === "workspace")) ? "#c9a84c" : "#3a3860", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+          <button key={item.id} onClick={() => setActiveTab(item.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: (activeTab === item.id || (item.id === "tracker" && activeTab === "workspace")) ? "#c9a84c" : "#5e5c88", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
             <span style={{ fontSize: "18px", lineHeight: 1 }}>{item.icon}</span>
             <span>{item.label}</span>
           </button>
         ))}
-        <button onClick={() => setDrawerOpen(true)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: "#3a3860", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <button onClick={() => setDrawerOpen(true)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "3px", background: "none", border: "none", cursor: "pointer", color: "#5e5c88", fontSize: "10px", fontFamily: "'DM Sans', system-ui, sans-serif" }}>
           <span style={{ fontSize: "18px", lineHeight: 1 }}>···</span>
           <span>More</span>
         </button>

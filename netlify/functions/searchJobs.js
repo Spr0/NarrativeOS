@@ -1,4 +1,9 @@
-export async function handler(event) {
+export async function handler(event, context) {
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
   if (!process.env.APIFY_TOKEN) {
     return { statusCode: 500, body: JSON.stringify({ error: "APIFY_TOKEN not configured" }) };
   }
@@ -6,10 +11,10 @@ export async function handler(event) {
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
 
-  const keyword = body.keyword || "transformation director";
-  const maxItems = body.maxItems || 30;
+  const rawKeyword = typeof body.keyword === "string" ? body.keyword : "transformation director";
+  const keyword = rawKeyword.slice(0, 200);
+  const maxItems = Math.min(Math.max(parseInt(body.maxItems) || 30, 1), 100);
 
-  // Build Indeed search URL — remote jobs in the US
   const indeedUrl = `https://www.indeed.com/jobs?q=${encodeURIComponent(keyword)}&l=Remote&sc=0kf%3Aattr(DSQF7)%3B&sort=date&fromage=14`;
 
   const res = await fetch(

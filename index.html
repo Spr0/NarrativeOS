@@ -14,13 +14,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      // Tell the widget which site it belongs to
-      if (window.netlifyIdentity) {
-        window.netlifyIdentity.init({
-          APIUrl: "https://aicareerforge.netlify.app/.netlify/identity"
-        });
-      }
-    </script>
+    <script src="/init.js"></script>
   </body>
 </html>

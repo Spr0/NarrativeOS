@@ -1,0 +1,7 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://identity.netlify.com https://accounts.google.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://gmail.googleapis.com https://www.googleapis.com https://accounts.google.com https://*.netlify.app https://*.netlify.com; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self'

@@ -73,7 +73,7 @@ exports.handler = async function (event, context) {
     return {
       statusCode: 502,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Upstream API error", detail: err.message }),
+      body: JSON.stringify({ error: "Upstream API error" }),
     };
   }
 };

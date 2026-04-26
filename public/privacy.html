@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — NarrativeOS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #080814;
+      color: #c0bce0;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      line-height: 1.7;
+      padding: 40px 20px 80px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 22px; font-weight: 800; color: #c9a84c; letter-spacing: 0.04em; margin-bottom: 6px; }
+    .meta { font-size: 11px; color: #3a3860; margin-bottom: 40px; }
+    h2 { font-size: 13px; font-weight: 700; color: #8a85c0; text-transform: uppercase; letter-spacing: 0.08em; margin: 32px 0 10px; }
+    p { font-size: 14px; color: #8a86a8; margin-bottom: 12px; }
+    ul { font-size: 14px; color: #8a86a8; padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; }
+    a { color: #4f6ef7; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; font-size: 12px; color: #3a3860; margin-bottom: 32px; }
+    .back:hover { color: #6a6880; }
+  </style>
+</head>
+<body>
+
+  <a href="/" class="back">← Back to NarrativeOS</a>
+
+  <h1>Privacy Policy</h1>
+  <p class="meta">Effective date: April 26, 2026 &nbsp;·&nbsp; NarrativeOS (aicareerforge.netlify.app)</p>
+
+  <h2>What NarrativeOS is</h2>
+  <p>NarrativeOS is a personal job-search tool. It helps you manage job applications, score resume fit against job descriptions, and draft tailored resume content using AI.</p>
+
+  <h2>Data you provide</h2>
+  <ul>
+    <li><strong>Account email</strong> — used only for authentication via Netlify Identity. Never sold or shared.</li>
+    <li><strong>Resume text</strong> — stored in your browser (localStorage) and optionally synced to a private, per-account server store (Netlify Blobs). Sent to Anthropic's API to generate content and critiques.</li>
+    <li><strong>Job descriptions</strong> — pasted by you. Processed the same way as resume text above.</li>
+    <li><strong>Application tracker data</strong> — company names, roles, stages, and notes. Stored locally and synced to your private account store.</li>
+    <li><strong>Work stories</strong> — narrative snippets you write. Stored locally and synced to your account store.</li>
+  </ul>
+
+  <h2>Gmail and Google Drive access</h2>
+  <p>If you connect Gmail, NarrativeOS reads your inbox to identify recruiter and job-related emails. It does not store email content — messages are fetched on demand, shown in the app, and discarded. Only a list of dismissed message IDs is saved locally.</p>
+  <p>If you connect Google Drive, NarrativeOS creates a folder called <em>NarrativeOS</em> in your Drive and saves exported resume documents there. No other Drive files are read or modified.</p>
+  <p>Google OAuth tokens are stored in your browser's localStorage and never sent to NarrativeOS servers. You can revoke access at any time from your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">Google Account permissions</a>.</p>
+
+  <h2>AI processing</h2>
+  <p>Resume text and job descriptions you provide are sent to <a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">Anthropic's API</a> to generate resume bullets, critiques, and gap analyses. Anthropic's privacy policy governs how they handle that data. NarrativeOS does not store the AI responses beyond your session.</p>
+
+  <h2>Activity logging</h2>
+  <p>NarrativeOS logs high-level events (e.g. "resume generated", "critique complete") to a private Discord channel used solely for monitoring app health. Logs may include your email address and a brief action description. No resume or JD content is included in logs.</p>
+
+  <h2>Cookies and local storage</h2>
+  <p>NarrativeOS does not use tracking cookies or third-party analytics. All app state is stored in your browser's localStorage. Authentication uses Netlify Identity, which sets a session cookie scoped to this site.</p>
+
+  <h2>Data retention and deletion</h2>
+  <p>Your data in localStorage persists until you clear your browser data. Your synced account data on Netlify Blobs persists until you delete your account. To request full deletion, sign out and contact us at the address below.</p>
+
+  <h2>Third-party services</h2>
+  <ul>
+    <li><a href="https://www.netlify.com/privacy/" target="_blank" rel="noopener noreferrer">Netlify</a> — hosting, serverless functions, identity, and blob storage</li>
+    <li><a href="https://www.anthropic.com/privacy" target="_blank" rel="noopener noreferrer">Anthropic</a> — AI text generation</li>
+    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google</a> — optional Gmail and Drive integration</li>
+    <li><a href="https://apify.com/privacy-policy" target="_blank" rel="noopener noreferrer">Apify</a> — optional job listing scraping</li>
+  </ul>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy changes materially, the effective date above will be updated. Continued use of NarrativeOS after a change constitutes acceptance of the revised policy.</p>
+
+  <h2>Contact</h2>
+  <p>Questions? Reach the developer through the NarrativeOS app or open an issue on the project repository.</p>
+
+</body>
+</html>

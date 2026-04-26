@@ -1192,8 +1192,9 @@ async function gmailGetMessage(token, id) {
 }
 
 async function getOrCreateDriveFolder(token, folderName = DRIVE_FOLDER_NAME) {
+  const safeName = folderName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
+    `https://www.googleapis.com/drive/v3/files?q=name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (searchRes.status === 401 || searchRes.status === 400) throw new Error("OAUTH_EXPIRED");
@@ -2240,9 +2241,10 @@ Omission is always safer than invention.`,
     if (!finalResume || !jd?.trim()) return;
     setCritiquing(true); setCritiqueOpen(true);
     try {
+      const critiqueToken = await getAuthToken();
       const res = await fetch("/.netlify/functions/critique", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(critiqueToken ? { Authorization: `Bearer ${critiqueToken}` } : {}) },
         body: JSON.stringify({ resumeText: finalResume, jdText: jd }),
       });
       const data = await res.json();
@@ -4229,8 +4231,11 @@ function DrawerNav({ active, onChange, onClose, user }) {
           ))}
         </div>
         <div style={{ padding: "16px 20px", borderTop: "1px solid #1a1830" }}>
-          <div style={{ fontSize: "11px", color: "#3a3860", marginBottom: "6px" }}>{user?.email}</div>
-          <button onClick={() => window.netlifyIdentity?.logout()} style={{ fontSize: "11px", color: "#4a4060", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Sign out</button>
+          <div style={{ fontSize: "11px", color: "#3a3860", marginBottom: "8px" }}>{user?.email}</div>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+            <button onClick={() => window.netlifyIdentity?.logout()} style={{ fontSize: "11px", color: "#4a4060", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Sign out</button>
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#3a3860", textDecoration: "none" }}>Privacy Policy</a>
+          </div>
         </div>
       </div>
     </>

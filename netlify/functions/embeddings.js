@@ -1,4 +1,9 @@
-exports.handler = async function (event) {
+exports.handler = async function (event, context) {
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
   try {
     const body = JSON.parse(event.body || "{}")
     const input = body.input
@@ -8,6 +13,14 @@ exports.handler = async function (event) {
         statusCode: 200,
         body: JSON.stringify({ embeddings: [] })
       }
+    }
+
+    // Validate input type and size
+    const isValid = typeof input === "string"
+      ? input.length <= 32000
+      : Array.isArray(input) && input.length <= 100 && input.every(s => typeof s === "string" && s.length <= 8000);
+    if (!isValid) {
+      return { statusCode: 400, body: JSON.stringify({ error: "Invalid input" }) }
     }
 
     const response = await fetch("https://api.openai.com/v1/embeddings", {
@@ -38,7 +51,7 @@ exports.handler = async function (event) {
       body: JSON.stringify({ embeddings })
     }
 
-  } catch (e) {
+  } catch {
     return {
       statusCode: 200,
       body: JSON.stringify({ embeddings: [] })

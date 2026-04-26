@@ -1,4 +1,9 @@
-export async function handler(event) {
+export async function handler(event, context) {
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
   if (!process.env.APIFY_TOKEN) {
     return { statusCode: 500, body: JSON.stringify({ error: "APIFY_TOKEN not configured" }) };
   }
@@ -9,7 +14,15 @@ export async function handler(event) {
   const { jobUrl } = body;
   if (!jobUrl) return { statusCode: 400, body: JSON.stringify({ error: "jobUrl required" }) };
 
-  // Trigger a single-job scrape using memo23 Indeed scraper
+  // Only allow Indeed job URLs to prevent misuse as an arbitrary scraping proxy
+  let parsed;
+  try { parsed = new URL(jobUrl); } catch {
+    return { statusCode: 400, body: JSON.stringify({ error: "Invalid jobUrl" }) };
+  }
+  if (!["www.indeed.com", "indeed.com"].includes(parsed.hostname)) {
+    return { statusCode: 400, body: JSON.stringify({ error: "jobUrl must be an Indeed URL" }) };
+  }
+
   const triggerRes = await fetch(
     `https://api.apify.com/v2/acts/memo23~apify-indeed-cheerio-ppr/runs?token=${process.env.APIFY_TOKEN}`,
     {

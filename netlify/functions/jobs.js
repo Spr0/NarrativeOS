@@ -1,4 +1,9 @@
-export async function handler() {
+export async function handler(event, context) {
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
   if (!process.env.APIFY_TOKEN) {
     return { statusCode: 500, body: JSON.stringify({ error: "no token" }) };
   }

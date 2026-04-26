@@ -26,9 +26,14 @@ Return this JSON structure exactly:
   "interviewLikelihood": "<Low / Medium / High> — <one sentence rationale>"
 }`;
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
+  }
+
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
   }
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -81,7 +86,7 @@ exports.handler = async (event) => {
 
     const parsed = JSON.parse(match[0]);
     return { statusCode: 200, body: JSON.stringify(parsed) };
-  } catch (err) {
-    return { statusCode: 500, body: JSON.stringify({ error: String(err) }) };
+  } catch {
+    return { statusCode: 500, body: JSON.stringify({ error: "Unexpected error" }) };
   }
 };

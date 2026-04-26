@@ -1,9 +1,28 @@
-export async function handler(event) {
+export async function handler(event, context) {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
+  }
+
+  const user = context.clientContext?.user;
+  if (!user) {
+    return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
   try {
     const body = JSON.parse(event.body || "{}");
 
-    if (body.mode === "gap") {
-      const prompt = `
+    if (body.mode !== "gap") {
+      return { statusCode: 400, body: JSON.stringify({ error: "Invalid mode" }) };
+    }
+
+    const requirement = typeof body.requirement === "string" ? body.requirement.slice(0, 2000) : "";
+    const resumeText = typeof body.resumeText === "string" ? body.resumeText.slice(0, 8000) : "";
+
+    if (!requirement || !resumeText) {
+      return { statusCode: 400, body: JSON.stringify({ error: "requirement and resumeText are required" }) };
+    }
+
+    const prompt = `
 You are a senior recruiter evaluating ONE requirement.
 
 RULES:
@@ -21,44 +40,39 @@ Return JSON ONLY:
 }
 
 Requirement:
-${body.requirement}
+${requirement}
 
 Resume:
-${body.resumeText}
+${resumeText}
 `;
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": process.env.ANTHROPIC_API_KEY,
-          "content-type": "application/json",
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5",
-          max_tokens: 500,
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5",
+        max_tokens: 500,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
 
-      const data = await res.json();
+    const data = await res.json();
+    const text = data.content?.[0]?.text || "{}";
+    const match = text.match(/\{[\s\S]*\}/);
 
-      const text = data.content?.[0]?.text || "{}";
+    return {
+      statusCode: 200,
+      body: match ? match[0] : "{}"
+    };
 
-      const match = text.match(/\{[\s\S]*\}/);
-
-      return {
-        statusCode: 200,
-        body: match ? match[0] : "{}"
-      };
-    }
-
-    return { statusCode: 400, body: "Invalid mode" };
-
-  } catch (e) {
+  } catch {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: e.message })
+      body: JSON.stringify({ error: "Unexpected error" })
     };
   }
 }

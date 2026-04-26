@@ -32,7 +32,7 @@ exports.handler = async (event, context) => {
       await store.setJSON(key, payload);
       return { statusCode: 200, body: JSON.stringify({ ok: true }) };
     } catch (err) {
-      return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+      return { statusCode: 500, body: JSON.stringify({ error: "Sync failed" }) };
     }
   }
 

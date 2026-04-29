@@ -4263,7 +4263,7 @@ function DrawerNav({ active, onChange, onClose, user }) {
     { id: "dashboard", icon: "\u229e", label: "Dashboard" },
     { id: "tracker",   icon: "\u2B21", label: "Tracker" },
     { id: "analyze",   icon: "\u2726", label: "Analyze Fit" },
-    { id: "stories",   icon: "\u25C8", label: "Stories" },
+    { id: "stories",   icon: "\u2605", label: "Stories" },
     { id: "prep",      icon: "\u25CE", label: "Interview Prep" },
     { id: "profile",   icon: "\u25C9", label: "Profile" },
     { id: "gmail",     icon: "\u2709", label: "Gmail" },
@@ -4459,7 +4459,7 @@ function DashboardTab({ cards: cardsProp, stories: storiesProp, profile, onNavig
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           {[
             { label: "Fit Check a JD",    sub: "Paste a JD and score your fit",                                        nav: "analyze", icon: "\u2726", warn: false },
-            { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "\u25C8", warn: stories.length === 0 },
+            { label: "Add a Story",       sub: `${stories.length} stor${stories.length === 1 ? "y" : "ies"} in library`, nav: "stories", icon: "\u2605", warn: stories.length === 0 },
             { label: "Update Profile",    sub: hasResume ? "Resume on file" : "No resume yet — add one",               nav: "profile", icon: "\u25C9", warn: !hasResume },
             { label: "Gmail Inbox",       sub: "Scan for recruiter emails",                                            nav: "gmail",   icon: "\u2709", warn: false },
           ].map(a => (
@@ -4514,7 +4514,7 @@ const NAV_ITEMS = [
   { id: "dashboard", icon: "\u229e", label: "Home" },
   { id: "tracker",   icon: "\u2B21", label: "Tracker" },
   { id: "analyze",   icon: "\u2726", label: "Analyze" },
-  { id: "stories",   icon: "\u25C8", label: "Stories" },
+  { id: "stories",   icon: "\u2605", label: "Stories" },
   { id: "profile",   icon: "\u25C9", label: "Profile" },
 ];
 
@@ -4691,14 +4691,14 @@ export default function NarrativeOS() {
           <span style={{ display: "block", width: "18px", height: "2px", background: "#8A8A87", borderRadius: "1px" }} />
           <span style={{ display: "block", width: "13px", height: "2px", background: "#8A8A87", borderRadius: "1px" }} />
         </button>
-        <div style={{ fontWeight: 800, fontSize: "15px", letterSpacing: "0.06em", color: "#312C85" }}>NARRATIVE<span style={{ color: "#ABABAB" }}>OS</span></div>
+        <button onClick={() => setActiveTab("dashboard")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 800, fontSize: "15px", letterSpacing: "0.06em", color: "#312C85", fontFamily: "'Inter', 'Open Sans', system-ui, sans-serif" }}>NARRATIVE<span style={{ color: "#ABABAB" }}>OS</span></button>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {apiLocked && <span style={{ fontSize: "10px", color: "#312C85", background: "rgba(49,44,133,0.08)", padding: "2px 8px", borderRadius: "10px" }}>&#x23F3;</span>}
           {cost > 0 && <span style={{ fontSize: "10px", color: "#BCBCBA" }}>${cost.toFixed(4)}</span>}
           {user && (
-            <div title={user.email} style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(49,44,133,0.10)", border: "1px solid rgba(49,44,133,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#312C85", flexShrink: 0, cursor: "default", fontFamily: "'Open Sans', system-ui, sans-serif" }}>
+            <button onClick={() => setActiveTab("profile")} title={user.email} style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(49,44,133,0.10)", border: "1px solid rgba(49,44,133,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#312C85", flexShrink: 0, cursor: "pointer", fontFamily: "'Open Sans', system-ui, sans-serif", padding: 0 }}>
               {(user.email || "?")[0].toUpperCase()}
-            </div>
+            </button>
           )}
         </div>
       </div>

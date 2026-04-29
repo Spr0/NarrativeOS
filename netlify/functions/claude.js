@@ -65,6 +65,10 @@ exports.handler = async function (event, context) {
     return { statusCode: 500, body: JSON.stringify({ error: "API key not configured on server" }) };
   }
 
+  if (!process.env.ANTHROPIC_MODEL) {
+    return { statusCode: 500, body: JSON.stringify({ error: "ANTHROPIC_MODEL is not set. Add it to Netlify Site settings > Environment variables." }) };
+  }
+
   let body;
   try {
     body = JSON.parse(event.body || "{}");

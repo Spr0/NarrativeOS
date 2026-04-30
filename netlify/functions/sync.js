@@ -1,5 +1,23 @@
 const { getStore } = require('@netlify/blobs');
 
+function initStore() {
+  // Try auto-detection first (requires NETLIFY_BLOBS_CONTEXT injected by runtime).
+  // If that fails, fall back to explicit credentials via a personal access token.
+  try {
+    return getStore('nos-data');
+  } catch {
+    const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+    const token = process.env.NETLIFY_ACCESS_TOKEN;
+    if (!siteID || !token) {
+      throw new Error(
+        'Blobs context not available and NETLIFY_ACCESS_TOKEN / SITE_ID are not set. ' +
+        'Add NETLIFY_ACCESS_TOKEN (a Netlify personal access token) to site env vars.'
+      );
+    }
+    return getStore({ name: 'nos-data', siteID, token });
+  }
+}
+
 exports.handler = async (event, context) => {
   try {
     const { user } = context.clientContext || {};
@@ -9,7 +27,7 @@ exports.handler = async (event, context) => {
 
     let store;
     try {
-      store = getStore('nos-data');
+      store = initStore();
     } catch (storeErr) {
       return {
         statusCode: 503,
@@ -27,7 +45,7 @@ exports.handler = async (event, context) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data ?? {})
         };
-      } catch (getErr) {
+      } catch {
         return {
           statusCode: 200,
           headers: { 'Content-Type': 'application/json' },

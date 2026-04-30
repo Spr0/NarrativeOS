@@ -4660,25 +4660,31 @@ export default function NarrativeOS() {
   useEffect(() => {
     if (!user) return;
     hydrating.current = true;
+    console.log("[sync] hydration started for", user.email);
     (async () => {
       try {
         const token = await getAuthToken();
-        if (!token) { hydrating.current = false; return; }
+        if (!token) { console.error("[sync] no token — getAuthToken returned empty"); hydrating.current = false; return; }
+        console.log("[sync] token obtained, length:", token.length);
 
         // Pull remote
         const res = await fetch("/.netlify/functions/sync", {
           headers: { "Authorization": `Bearer ${token}` }
         });
-        if (!res.ok) { hydrating.current = false; return; }
+        console.log("[sync] GET status:", res.status);
+        if (!res.ok) { console.error("[sync] GET failed with status:", res.status); hydrating.current = false; return; }
         const remote = (await res.json()) || {};
+        console.log("[sync] remote keys:", Object.keys(remote), "remote cards:", Array.isArray(remote.nos_cards) ? remote.nos_cards.length : "not array");
 
         // Merge cards: union by ID, remote wins on conflict
         const localCards = storageGet("nos_cards") || [];
         const remoteCards = Array.isArray(remote.nos_cards) ? remote.nos_cards : [];
+        console.log("[sync] local cards:", localCards.length, "remote cards:", remoteCards.length);
         const cardMap = new Map();
         localCards.forEach(c => c?.id && cardMap.set(c.id, c));
         remoteCards.forEach(c => c?.id && cardMap.set(c.id, c));
         const mergedCards = [...cardMap.values()];
+        console.log("[sync] merged cards:", mergedCards.length);
 
         // Merge stories: same pattern
         const localStories = storageGet("nos_stories") || [];
@@ -4715,11 +4721,17 @@ export default function NarrativeOS() {
           nos_corrections: mergedCorrections,
           nos_gaps: mergedGaps,
         };
-        fetch("/.netlify/functions/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-          body: JSON.stringify(merged)
-        }).catch(() => {});
+        try {
+          const pushRes = await fetch("/.netlify/functions/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+            body: JSON.stringify(merged)
+          });
+          console.log("[sync] POST status:", pushRes.status);
+          if (!pushRes.ok) { const txt = await pushRes.text(); console.error("[sync] POST failed:", txt); }
+        } catch (pushErr) {
+          console.error("[sync] POST threw:", pushErr);
+        }
 
         // Hydrate state
         setProfile(mergedProfile);
@@ -4727,9 +4739,11 @@ export default function NarrativeOS() {
         if (mergedStories.length > 0 || remoteStories.length > 0) setStories(mergedStories);
         if (Object.keys(mergedCorrections).length > 0) setCorrections(mergedCorrections);
         if (mergedGaps.length > 0) setGaps(mergedGaps);
+        console.log("[sync] hydration complete — set", mergedCards.length, "cards");
 
         setTimeout(() => { hydrating.current = false; }, 200);
-      } catch {
+      } catch (err) {
+        console.error("[sync] unexpected error:", err);
         hydrating.current = false;
       }
     })();

@@ -1736,6 +1736,34 @@ function SaveToDriveBtn({ blob, filename, onSaved, disabled, userEmail, folderNa
 // 9. AUTH
 // ─────────────────────────────────────────────────────────────────────────────
 
+function UserMenu({ user, onProfile }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function handle(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handle);
+    document.addEventListener("touchstart", handle);
+    return () => { document.removeEventListener("mousedown", handle); document.removeEventListener("touchstart", handle); };
+  }, [open]);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button onClick={() => setOpen(v => !v)} title={user.email} style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(49,44,133,0.10)", border: "1px solid rgba(49,44,133,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#312C85", flexShrink: 0, cursor: "pointer", fontFamily: "'Open Sans', system-ui, sans-serif", padding: 0 }}>
+        {(user.email || "?")[0].toUpperCase()}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "34px", right: 0, background: "#FFFFFF", border: "1px solid #E8E8E5", borderRadius: "8px", minWidth: "168px", zIndex: 200, boxShadow: "0 4px 16px rgba(0,0,0,0.10)", overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid #E8E8E5" }}>
+            <div style={{ fontSize: "11px", color: "#8A8A87", wordBreak: "break-all" }}>{user.email}</div>
+          </div>
+          <button onClick={() => { onProfile(); setOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", fontSize: "13px", color: "#3C3C39", background: "none", border: "none", cursor: "pointer", fontFamily: "'Open Sans', system-ui, sans-serif" }}>Profile</button>
+          <button onClick={() => { setOpen(false); window.netlifyIdentity?.logout(); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 14px", fontSize: "13px", color: "#DC2626", background: "none", border: "none", cursor: "pointer", fontFamily: "'Open Sans', system-ui, sans-serif", borderTop: "1px solid #E8E8E5" }}>Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function useNetlifyAuth() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -3611,23 +3639,53 @@ function DecisionLogTab({ log }) {
 // ROLE WORKSPACE
 // ─────────────────────────────────────────────────────────────────────────────
 
-function WhatYouSent({ card, onClose }) {
-  const [view, setView] = useState(card.resumeText ? "resume" : "cover");
-  if (!card.resumeText && !card.coverLetterText) return null;
+function WhatYouSent({ card, onClose, onSaveSubmitted }) {
+  const [view, setView] = useState(card.resumeText ? "resume" : card.coverLetterText ? "cover" : "submitted");
+  const [pasteMode, setPasteMode] = useState(!card.resumeText && !card.coverLetterText && !card.submittedResume);
+  const [draft, setDraft] = useState("");
+
+  const activeText = view === "resume" ? card.resumeText : view === "cover" ? card.coverLetterText : card.submittedResume;
+
+  function saveSubmitted() {
+    if (draft.trim()) { onSaveSubmitted(draft.trim()); setPasteMode(false); setDraft(""); }
+  }
+
   return (
     <div style={{ background: "rgba(255,255,255,0.99)", borderBottom: "1px solid #E8E8E5", padding: "12px 20px", flexShrink: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
         <div style={{ fontSize: "10px", fontWeight: 700, color: "#312C85", letterSpacing: "0.1em", textTransform: "uppercase" }}>What You Sent</div>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "#ABABAB", fontSize: "12px", cursor: "pointer" }}>hide</button>
       </div>
-      <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
-        {card.resumeText && <button onClick={() => setView("resume")} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "resume" ? "#16A34A" : "#E8E8E5", background: view === "resume" ? "rgba(22,163,74,0.08)" : "transparent", color: view === "resume" ? "#16A34A" : "#8A8A87", cursor: "pointer" }}>Resume{card.resumeType ? ` (${card.resumeType})` : ""}</button>}
-        {card.coverLetterText && <button onClick={() => setView("cover")} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "cover" ? "#0D9488" : "#E8E8E5", background: view === "cover" ? "rgba(20,184,166,0.1)" : "transparent", color: view === "cover" ? "#0D9488" : "#8A8A87", cursor: "pointer" }}>Cover Letter</button>}
-        <CopyBtn text={view === "resume" ? card.resumeText : card.coverLetterText} />
+      <div style={{ display: "flex", gap: "6px", marginBottom: "10px", flexWrap: "wrap" }}>
+        {card.resumeText && <button onClick={() => { setView("resume"); setPasteMode(false); }} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "resume" ? "#16A34A" : "#E8E8E5", background: view === "resume" ? "rgba(22,163,74,0.08)" : "transparent", color: view === "resume" ? "#16A34A" : "#8A8A87", cursor: "pointer" }}>Generated{card.resumeType ? ` (${card.resumeType})` : ""}</button>}
+        {card.coverLetterText && <button onClick={() => { setView("cover"); setPasteMode(false); }} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "cover" ? "#0D9488" : "#E8E8E5", background: view === "cover" ? "rgba(20,184,166,0.1)" : "transparent", color: view === "cover" ? "#0D9488" : "#8A8A87", cursor: "pointer" }}>Cover Letter</button>}
+        <button onClick={() => { setView("submitted"); setPasteMode(!card.submittedResume); }} style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "4px", border: "1px solid", borderColor: view === "submitted" ? "#7C3AED" : "#E8E8E5", background: view === "submitted" ? "rgba(124,58,237,0.08)" : "transparent", color: view === "submitted" ? "#7C3AED" : "#8A8A87", cursor: "pointer" }}>Submitted{card.submittedResume ? " ✓" : " +"}</button>
+        {activeText && <CopyBtn text={activeText} />}
       </div>
-      <div style={{ fontSize: "11px", color: "#6B6B68", whiteSpace: "pre-wrap", maxHeight: "140px", overflowY: "auto", lineHeight: 1.6, background: "rgba(12,12,9,0.03)", borderRadius: "6px", padding: "10px 12px" }}>
-        {view === "resume" ? card.resumeText : card.coverLetterText}
-      </div>
+      {view === "submitted" && pasteMode ? (
+        <div>
+          <textarea
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="Paste the final version you actually submitted (after Claude Chat polish)..."
+            rows={6}
+            style={{ width: "100%", fontSize: "11px", color: "#3C3C39", background: "#FAFAF8", border: "1px solid #E8E8E5", borderRadius: "6px", padding: "10px 12px", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+          />
+          <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+            <button onClick={saveSubmitted} disabled={!draft.trim()} style={{ fontSize: "11px", padding: "4px 14px", borderRadius: "4px", border: "1px solid rgba(124,58,237,0.4)", background: "rgba(124,58,237,0.08)", color: "#7C3AED", cursor: draft.trim() ? "pointer" : "default", opacity: draft.trim() ? 1 : 0.5 }}>Save</button>
+            <button onClick={() => setPasteMode(false)} style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "4px", border: "1px solid #E8E8E5", background: "none", color: "#8A8A87", cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: "11px", color: "#6B6B68", whiteSpace: "pre-wrap", maxHeight: "140px", overflowY: "auto", lineHeight: 1.6, background: "rgba(12,12,9,0.03)", borderRadius: "6px", padding: "10px 12px" }}>
+          {view === "submitted" && !card.submittedResume
+            ? <span style={{ color: "#ABABAB", fontStyle: "italic" }}>No submitted version saved yet. Click "Submitted +" to paste the final polished version.</span>
+            : activeText}
+        </div>
+      )}
+      {view === "submitted" && card.submittedResume && !pasteMode && (
+        <button onClick={() => setPasteMode(true)} style={{ marginTop: "6px", fontSize: "10px", color: "#ABABAB", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Replace</button>
+      )}
     </div>
   );
 }
@@ -3638,7 +3696,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
   const [showSent, setShowSent] = useState(true);
 
   const liveCard = cards.find(c => c.id === card.id) || card;
-  const hasSent = liveCard.resumeText || liveCard.coverLetterText;
+  const hasSent = liveCard.resumeText || liveCard.coverLetterText || liveCard.submittedResume;
 
   const [jdExpanded, setJdExpanded] = useState(false);
   const [showFollowUps, setShowFollowUps] = useState(false);
@@ -3737,7 +3795,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginLeft: "12px" }}>
-            {hasSent && <button onClick={() => setShowSent(v => !v)} style={{ fontSize: "10px", color: "#312C85", background: "rgba(49,44,133,0.06)", border: "1px solid rgba(49,44,133,0.14)", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>What I Sent</button>}
+            <button onClick={() => setShowSent(v => !v)} style={{ fontSize: "10px", color: "#312C85", background: "rgba(49,44,133,0.06)", border: "1px solid rgba(49,44,133,0.14)", borderRadius: "4px", padding: "3px 8px", cursor: "pointer" }}>What I Sent</button>
             {confirmDelete ? (
               <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                 <span style={{ fontSize: "11px", color: "#DC2626" }}>Delete role?</span>
@@ -3751,7 +3809,7 @@ function RoleWorkspace({ card, cards, setCards, profile, setProfile, stories, on
           </div>
         </div>
       </div>
-      {hasSent && showSent && <WhatYouSent card={liveCard} onClose={() => setShowSent(false)} />}
+      {showSent && <WhatYouSent card={liveCard} onClose={() => setShowSent(false)} onSaveSubmitted={text => updateCard({ submittedResume: text })} />}
       {(() => {
         const followUps = Array.isArray(liveCard.followUps) ? liveCard.followUps : [];
         const lastFu = followUps.length > 0 ? followUps[followUps.length - 1] : null;
@@ -4611,7 +4669,23 @@ export default function NarrativeOS() {
         });
         if (!res.ok) { hydrating.current = false; return; }
         const data = await res.json();
-        if (!data || Object.keys(data).length === 0) { hydrating.current = false; return; }
+        if (!data || Object.keys(data).length === 0) {
+          // Remote is empty — push local state so this device's data is preserved.
+          const payload = {
+            nos_profile: storageGet("nos_profile"),
+            nos_cards: storageGet("nos_cards"),
+            nos_stories: storageGet("nos_stories"),
+            nos_corrections: storageGet("nos_corrections"),
+            nos_gaps: storageGet("nos_gaps"),
+          };
+          fetch("/.netlify/functions/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+            body: JSON.stringify(payload)
+          }).catch(() => {});
+          hydrating.current = false;
+          return;
+        }
         if (data.nos_profile && typeof data.nos_profile === "object" && !Array.isArray(data.nos_profile)) {
           setProfile({ ...DEFAULT_PROFILE, ...data.nos_profile });
         }
@@ -4630,7 +4704,7 @@ export default function NarrativeOS() {
 
   function makeCard(overrides = {}) {
     const stage = overrides.stage || "Considering";
-    return { id: generateId(), company: "", title: "", stage, jd: "", jdUrl: "", tags: [], notes: "", resumeText: "", coverLetterText: "", resumeType: "", corrections: [], followUps: [], createdAt: getToday(), stageHistory: [{ stage, at: getToday() }], ...overrides };
+    return { id: generateId(), company: "", title: "", stage, jd: "", jdUrl: "", tags: [], notes: "", resumeText: "", coverLetterText: "", resumeType: "", submittedResume: "", corrections: [], followUps: [], createdAt: getToday(), stageHistory: [{ stage, at: getToday() }], ...overrides };
   }
 
   function addCard() {
@@ -4695,11 +4769,7 @@ export default function NarrativeOS() {
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {apiLocked && <span style={{ fontSize: "10px", color: "#312C85", background: "rgba(49,44,133,0.08)", padding: "2px 8px", borderRadius: "10px" }}>&#x23F3;</span>}
           {cost > 0 && <span style={{ fontSize: "10px", color: "#BCBCBA" }}>${cost.toFixed(4)}</span>}
-          {user && (
-            <button onClick={() => setActiveTab("profile")} title={user.email} style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(49,44,133,0.10)", border: "1px solid rgba(49,44,133,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#312C85", flexShrink: 0, cursor: "pointer", fontFamily: "'Open Sans', system-ui, sans-serif", padding: 0 }}>
-              {(user.email || "?")[0].toUpperCase()}
-            </button>
-          )}
+          {user && <UserMenu user={user} onProfile={() => setActiveTab("profile")} />}
         </div>
       </div>
 

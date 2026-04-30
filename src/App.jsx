@@ -4654,9 +4654,9 @@ export default function NarrativeOS() {
     }
   }, []);
 
-  // On login (or first mount with a returning user), pull the remote blob and
-  // hydrate all state. The hydrating guard prevents the write effects above
-  // from echoing the old localStorage data back to the blob during this window.
+  // On login (or first mount with a returning user): merge local + remote by ID,
+  // push the merged result, then hydrate. This handles multiple devices with
+  // diverged data — union of cards/stories by ID, remote wins on same ID.
   useEffect(() => {
     if (!user) return;
     hydrating.current = true;
@@ -4664,37 +4664,70 @@ export default function NarrativeOS() {
       try {
         const token = await getAuthToken();
         if (!token) { hydrating.current = false; return; }
+
+        // Pull remote
         const res = await fetch("/.netlify/functions/sync", {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (!res.ok) { hydrating.current = false; return; }
-        const data = await res.json();
-        if (!data || Object.keys(data).length === 0) {
-          // Remote is empty — push local state so this device's data is preserved.
-          const payload = {
-            nos_profile: storageGet("nos_profile"),
-            nos_cards: storageGet("nos_cards"),
-            nos_stories: storageGet("nos_stories"),
-            nos_corrections: storageGet("nos_corrections"),
-            nos_gaps: storageGet("nos_gaps"),
-          };
-          fetch("/.netlify/functions/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-            body: JSON.stringify(payload)
-          }).catch(() => {});
-          hydrating.current = false;
-          return;
-        }
-        if (data.nos_profile && typeof data.nos_profile === "object" && !Array.isArray(data.nos_profile)) {
-          setProfile({ ...DEFAULT_PROFILE, ...data.nos_profile });
-        }
-        if (Array.isArray(data.nos_cards)) setCards(data.nos_cards);
-        if (Array.isArray(data.nos_stories)) setStories(data.nos_stories);
-        if (data.nos_corrections && typeof data.nos_corrections === "object" && !Array.isArray(data.nos_corrections)) {
-          setCorrections(data.nos_corrections);
-        }
-        if (Array.isArray(data.nos_gaps) && data.nos_gaps.length > 0) setGaps(data.nos_gaps);
+        const remote = (await res.json()) || {};
+
+        // Merge cards: union by ID, remote wins on conflict
+        const localCards = storageGet("nos_cards") || [];
+        const remoteCards = Array.isArray(remote.nos_cards) ? remote.nos_cards : [];
+        const cardMap = new Map();
+        localCards.forEach(c => c?.id && cardMap.set(c.id, c));
+        remoteCards.forEach(c => c?.id && cardMap.set(c.id, c));
+        const mergedCards = [...cardMap.values()];
+
+        // Merge stories: same pattern
+        const localStories = storageGet("nos_stories") || [];
+        const remoteStories = Array.isArray(remote.nos_stories) ? remote.nos_stories : [];
+        const storyMap = new Map();
+        localStories.forEach(s => s?.id && storyMap.set(s.id, s));
+        remoteStories.forEach(s => s?.id && storyMap.set(s.id, s));
+        const mergedStories = [...storyMap.values()];
+
+        // Profile: remote wins if it has a resume, otherwise keep local
+        const localProfile = storageGet("nos_profile") || {};
+        const remoteProfile = (remote.nos_profile && typeof remote.nos_profile === "object" && !Array.isArray(remote.nos_profile))
+          ? remote.nos_profile : null;
+        const mergedProfile = remoteProfile?.resumeUploaded ? { ...DEFAULT_PROFILE, ...remoteProfile }
+          : localProfile.resumeUploaded ? { ...DEFAULT_PROFILE, ...localProfile }
+          : { ...DEFAULT_PROFILE, ...localProfile, ...(remoteProfile || {}) };
+
+        // Corrections: union by key, remote wins
+        const localCorrections = storageGet("nos_corrections") || {};
+        const remoteCorrections = (remote.nos_corrections && typeof remote.nos_corrections === "object" && !Array.isArray(remote.nos_corrections))
+          ? remote.nos_corrections : {};
+        const mergedCorrections = { ...localCorrections, ...remoteCorrections };
+
+        // Gaps: remote wins if longer
+        const localGaps = storageGet("nos_gaps") || [];
+        const remoteGaps = Array.isArray(remote.nos_gaps) ? remote.nos_gaps : [];
+        const mergedGaps = remoteGaps.length >= localGaps.length ? remoteGaps : localGaps;
+
+        // Push merged state back so both devices converge
+        const merged = {
+          nos_profile: mergedProfile,
+          nos_cards: mergedCards,
+          nos_stories: mergedStories,
+          nos_corrections: mergedCorrections,
+          nos_gaps: mergedGaps,
+        };
+        fetch("/.netlify/functions/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          body: JSON.stringify(merged)
+        }).catch(() => {});
+
+        // Hydrate state
+        setProfile(mergedProfile);
+        if (mergedCards.length > 0 || remoteCards.length > 0) setCards(mergedCards);
+        if (mergedStories.length > 0 || remoteStories.length > 0) setStories(mergedStories);
+        if (Object.keys(mergedCorrections).length > 0) setCorrections(mergedCorrections);
+        if (mergedGaps.length > 0) setGaps(mergedGaps);
+
         setTimeout(() => { hydrating.current = false; }, 200);
       } catch {
         hydrating.current = false;

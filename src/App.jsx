@@ -4672,7 +4672,7 @@ export default function NarrativeOS() {
           headers: { "Authorization": `Bearer ${token}` }
         });
         console.log("[sync] GET status:", res.status);
-        if (!res.ok) { console.error("[sync] GET failed with status:", res.status); hydrating.current = false; return; }
+        if (!res.ok) { const errBody = await res.text(); console.error("[sync] GET failed:", res.status, errBody); hydrating.current = false; return; }
         const remote = (await res.json()) || {};
         console.log("[sync] remote keys:", Object.keys(remote), "remote cards:", Array.isArray(remote.nos_cards) ? remote.nos_cards.length : "not array");
 

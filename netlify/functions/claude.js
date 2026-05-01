@@ -108,7 +108,7 @@ exports.handler = async function (event, context) {
     }
     requestBody = {
       model: process.env.ANTHROPIC_MODEL,
-      max_tokens: Math.min(Math.max(Number(maxTokens) || 2000, 100), 4000),
+      max_tokens: Math.min(Math.max(Number(maxTokens) || 1500, 100), 1500),
       messages: [{ role: "user", content: sanitize(userMessage) }],
     };
     if (system) requestBody.system = sanitize(system);

@@ -34,7 +34,7 @@ exports.handler = async (event, context) => {
     const key = `job:${user.sub}:${jobId}`;
     const result = await store.get(key, { type: 'json' });
 
-    if (!result) {
+    if (!result || result.status === 'running') {
       return {
         statusCode: 202,
         headers: { 'Content-Type': 'application/json' },

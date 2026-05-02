@@ -244,9 +244,9 @@ Score all ${jobCount} jobs. No preamble.`,
       : "";
     const vsContext = verifiedSkillsContext(profile.verifiedSkills);
     const prepContextText = profile.prepContext?.trim()
-      ? `\n\nINTERVIEW POSITIONING INTELLIGENCE — treat as verified framing, not speculation:\n${profile.prepContext.slice(0, 1500)}`
+      ? `\n\nINTERVIEW POSITIONING INTELLIGENCE — treat as verified framing, not speculation:\n${profile.prepContext.slice(0, 800)}`
       : "";
-    const resumeText = (profile.resumeText || "").slice(0, 3500);
+    const resumeText = (profile.resumeText || "").slice(0, 2000);
     const hasStories = stories && stories.length > 0;
     const profileContext = hasStories ? `RESUME BASELINE:\n${resumeText}` : `RESUME (no stories yet — evaluate from resume only):\n${resumeText}`;
     return `You are a senior career strategist evaluating fit for ${profile.name || "this candidate"}.
@@ -985,7 +985,7 @@ async function callClaudeLong(system, user, maxTokens = 2700) {
     });
     if (startRes.status !== 202) throw new Error(`Failed to start generation (${startRes.status})`);
 
-    const deadline = Date.now() + 120000;
+    const deadline = Date.now() + 180000;
     while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(`/.netlify/functions/job?jobId=${encodeURIComponent(jobId)}`, {
@@ -1974,7 +1974,7 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
       `${i + 1}. "${s.title}" [${s.competencies?.join(", ") || ""}]\nHook: ${s.hook || ""}\nResult: ${s.result || ""}`
     ).join("\n\n") : "";
     const userCtx = stories.length > 0 ? `INTERVIEW STORIES (use these as verified proof points in scoring):\n${storyList}\n\n` : "";
-    const text = await callClaudeLong(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 3000);
+    const text = await callClaude(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 1000);
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error("Could not parse analysis response");
     const p = JSON.parse(m[0]);
@@ -2920,7 +2920,7 @@ Every metric, company name, title, date, and quantified result in the output mus
 
 Return ONLY the revised JSON object. No markdown. No commentary. No code fences.`;
       const user = `CURRENT BRIEF (JSON — source of truth):\n${JSON.stringify(prepData, null, 2)}\n\nFEEDBACK TO APPLY:\n${feedback}`;
-      const raw = await callClaudeLong(system, user, 2400);
+      const raw = await callClaude(system, user, 1200);
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Refine response was not valid JSON. Try again.");

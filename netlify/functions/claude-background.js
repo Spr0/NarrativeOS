@@ -14,7 +14,7 @@ function initStore() {
 
 exports.handler = async (event, context) => {
   const user = context.clientContext?.user;
-  if (!user?.sub) return; // background — just exit
+  if (!user?.sub) return;
 
   let body;
   try { body = JSON.parse(event.body || '{}'); } catch { return; }
@@ -23,9 +23,16 @@ exports.handler = async (event, context) => {
   if (!jobId || !userMessage) return;
 
   let store;
-  try { store = initStore(); } catch { return; }
+  try { store = initStore(); } catch (e) {
+    console.error('[bg] store init failed:', e.message);
+    return;
+  }
 
   const key = `job:${user.sub}:${jobId}`;
+
+  // Heartbeat — confirms function is alive; client sees "running" until result replaces it
+  try { await store.set(key, JSON.stringify({ status: 'running' })); }
+  catch (e) { console.error('[bg] heartbeat write failed:', e.message); return; }
 
   try {
     const requestBody = {
@@ -35,6 +42,7 @@ exports.handler = async (event, context) => {
     };
     if (system) requestBody.system = String(system).slice(0, 40000);
 
+    console.log('[bg] calling Anthropic, max_tokens:', requestBody.max_tokens);
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -46,10 +54,12 @@ exports.handler = async (event, context) => {
     });
 
     const data = await res.json();
+    console.log('[bg] Anthropic responded, status:', res.status);
     await store.set(key, JSON.stringify({ ok: res.ok, statusCode: res.status, data }));
+    console.log('[bg] result written to Blobs');
   } catch (err) {
-    try {
-      await store.set(key, JSON.stringify({ ok: false, error: err.message }));
-    } catch { /* swallow */ }
+    console.error('[bg] error:', err.message);
+    try { await store.set(key, JSON.stringify({ ok: false, error: err.message })); }
+    catch { /* swallow */ }
   }
 };

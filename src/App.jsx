@@ -1974,7 +1974,7 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
       `${i + 1}. "${s.title}" [${s.competencies?.join(", ") || ""}]\nHook: ${s.hook || ""}\nResult: ${s.result || ""}`
     ).join("\n\n") : "";
     const userCtx = stories.length > 0 ? `INTERVIEW STORIES (use these as verified proof points in scoring):\n${storyList}\n\n` : "";
-    const text = await callClaude(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 1000);
+    const text = await callClaude(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 1400);
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error("Could not parse analysis response");
     const p = JSON.parse(m[0]);

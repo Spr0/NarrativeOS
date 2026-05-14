@@ -1005,24 +1005,35 @@ async function callClaudeLong(system, user, maxTokens = 2700) {
 
 async function callClaudeResearch(company, roleTitle, jdUrl, jdText) {
   const token = await getAuthToken();
-  const res = await fetch(PROXY_URL, {
+  const jobId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+  const startRes = await fetch("/.netlify/functions/claude-background", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ mode: "research", company, roleTitle, jdUrl, jdText: (jdText || "").slice(0, 8000), maxTokens: 6000 }),
+    body: JSON.stringify({ jobId, mode: "research", company, roleTitle, jdUrl, jdText: (jdText || "").slice(0, 8000) }),
   });
-  const raw = await res.text();
-  let data;
-  try { data = JSON.parse(raw); } catch { throw new Error(`Server error (HTTP ${res.status})`); }
-  if (!res.ok || data.error) throw new Error(data.error?.message || data.error || `API ${res.status}`);
-  const text = data.content?.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
-  if (!text) throw new Error("No content returned from research engine.");
-  const cleaned = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("Research response was not valid JSON. Try again.");
-  return JSON.parse(match[0]);
+  if (startRes.status !== 202) throw new Error(`Failed to start research (${startRes.status})`);
+
+  const deadline = Date.now() + 180000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 4000));
+    const pollRes = await fetch(`/.netlify/functions/job?jobId=${encodeURIComponent(jobId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const pollData = await pollRes.json();
+    if (pollData.status === "pending") continue;
+    if (!pollRes.ok || pollData.error) throw new Error(pollData.error?.message || pollData.error || `Research failed (${pollRes.status})`);
+    const text = pollData.content?.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+    if (!text) throw new Error("No content returned from research engine.");
+    const cleaned = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("Research response was not valid JSON. Try again.");
+    return JSON.parse(match[0]);
+  }
+  throw new Error("Research timed out — please try again");
 }
 
 async function extractContactFromResume(resumeText) {

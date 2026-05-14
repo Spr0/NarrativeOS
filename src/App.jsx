@@ -2889,7 +2889,7 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
     if (!base && !jd) { setError("Add a resume or JD first."); return; }
     setLoading(true); setError(""); setPrepData(null); setRawText(""); setBlob(null); setPdfBlob(null); setSavedToCard(false);
     try {
-      const raw = await callClaude(
+      const raw = await callClaudeLong(
         PROMPTS.interviewPrep(profile, stories, depth),
         `Company: ${company}\nRole: ${role}\nJD:\n${jd || "(none)"}\nResume:\n${(base || "").slice(0, 3500)}`,
         2400
@@ -2931,7 +2931,7 @@ Every metric, company name, title, date, and quantified result in the output mus
 
 Return ONLY the revised JSON object. No markdown. No commentary. No code fences.`;
       const user = `CURRENT BRIEF (JSON — source of truth):\n${JSON.stringify(prepData, null, 2)}\n\nFEEDBACK TO APPLY:\n${feedback}`;
-      const raw = await callClaude(system, user, 1200);
+      const raw = await callClaudeLong(system, user, 1200);
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Refine response was not valid JSON. Try again.");

@@ -985,9 +985,9 @@ async function callClaudeLong(system, user, maxTokens = 2700) {
     });
     if (startRes.status !== 202) throw new Error(`Failed to start generation (${startRes.status})`);
 
-    const deadline = Date.now() + 180000;
+    const deadline = Date.now() + 270000;
     while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 4000));
       const pollRes = await fetch(`/.netlify/functions/job?jobId=${encodeURIComponent(jobId)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -2891,8 +2891,8 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
     try {
       const raw = await callClaudeLong(
         PROMPTS.interviewPrep(profile, stories, depth),
-        `Company: ${company}\nRole: ${role}\nJD:\n${jd || "(none)"}\nResume:\n${(base || "").slice(0, 3500)}`,
-        2400
+        `Company: ${company}\nRole: ${role}\nJD:\n${(jd || "(none)").slice(0, 6000)}\nResume:\n${(base || "").slice(0, 3500)}`,
+        1800
       );
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);

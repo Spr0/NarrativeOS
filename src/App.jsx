@@ -1011,6 +1011,35 @@ async function callClaude(system, user, maxTokens = 2000) {
   } finally { setApiLock(false); }
 }
 
+async function callClaudeLong(system, user, maxTokens = 2700) {
+  setApiLock(true);
+  try {
+    const token = await getAuthToken();
+    const jobId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const startRes = await fetch("/.netlify/functions/claude-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ jobId, system, userMessage: user, maxTokens }),
+    });
+    if (startRes.status !== 202) throw new Error(`Failed to start generation (${startRes.status})`);
+    const deadline = Date.now() + 270000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 4000));
+      const pollRes = await fetch(`/.netlify/functions/job?jobId=${encodeURIComponent(jobId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const pollData = await pollRes.json();
+      if (pollData.status === "pending") continue;
+      if (!pollRes.ok || pollData.error) throw new Error(pollData.error?.message || pollData.error || `Generation failed (${pollRes.status})`);
+      const text = pollData.content?.find(b => b.type === "text")?.text || "";
+      if (!text) throw new Error("Empty response from AI");
+      trackCost((system + user).length, text.length);
+      return text;
+    }
+    throw new Error("Generation timed out — please try again");
+  } finally { setApiLock(false); }
+}
+
 async function callClaudeSearch(company, query) {
   setApiLock(true);
   try {
@@ -1378,7 +1407,7 @@ ${_ACCURACY_RULES}
 VERIFIED BASE RESUME (single source of truth):
 ${baseResume}`;
 
-  return callClaude(
+  return callClaudeLong(
     PROMPTS.resumeRender(resumeType),
     `${factLock}\n\nApproved Strategy:\n${strategy}\n\nJob Description:\n${jd}`,
     2700
@@ -1909,7 +1938,7 @@ function AnalyzeTab({ stories, corrections, onSaveCorrections, onTrackBuildResum
       `${i + 1}. "${s.title}" [${s.competencies?.join(", ") || ""}]\nHook: ${s.hook || ""}\nResult: ${s.result || ""}`
     ).join("\n\n") : "";
     const userCtx = stories.length > 0 ? `INTERVIEW STORIES (use these as verified proof points in scoring):\n${storyList}\n\n` : "";
-    const text = await callClaude(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 3000);
+    const text = await callClaudeLong(PROMPTS.jdAnalyzer(profile, stories, activeCorrections), `${userCtx}Job Description:\n${jd}`, 2000);
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) throw new Error("Could not parse analysis response");
     const p = JSON.parse(m[0]);
@@ -2213,7 +2242,7 @@ function ResumeTab({ profile, card, jd, stories = [], onSaveToCard, onAddVariant
     if (!feedback.trim() || !finalResume) return;
     setRefining(true);
     try {
-      const refined = await callClaude(
+      const refined = await callClaudeLong(
         `You are refining a resume. Apply the user's feedback precisely. Maintain all formatting rules, Hankel language, and ${resumeType} structure. Return only the revised resume text.
 
 FACT LOCK — HARD CONSTRAINT:
@@ -2812,10 +2841,10 @@ function InterviewPrepTab({ profile, card, jd, stories, onUpdateCard, onUpdatePr
     if (!base && !jd) { setError("Add a resume or JD first."); return; }
     setLoading(true); setError(""); setPrepData(null); setRawText(""); setBlob(null); setPdfBlob(null); setSavedToCard(false);
     try {
-      const raw = await callClaude(
+      const raw = await callClaudeLong(
         PROMPTS.interviewPrep(profile, stories, depth),
-        `Company: ${company}\nRole: ${role}\nJD:\n${jd || "(none)"}\nResume:\n${(base || "").slice(0, 3500)}`,
-        2400
+        `Company: ${company}\nRole: ${role}\nJD:\n${(jd || "(none)").slice(0, 6000)}\nResume:\n${(base || "").slice(0, 3500)}`,
+        1800
       );
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
@@ -2854,7 +2883,7 @@ Every metric, company name, title, date, and quantified result in the output mus
 
 Return ONLY the revised JSON object. No markdown. No commentary. No code fences.`;
       const user = `CURRENT BRIEF (JSON — source of truth):\n${JSON.stringify(prepData, null, 2)}\n\nFEEDBACK TO APPLY:\n${feedback}`;
-      const raw = await callClaude(system, user, 2400);
+      const raw = await callClaudeLong(system, user, 1800);
       const cleaned = raw.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("Refine response was not valid JSON. Try again.");
@@ -3289,7 +3318,7 @@ function MyStoriesTab({ profile, stories: storiesProp, setStories }) {
     if (!base) return;
     setExtracting(true);
     try {
-      const raw = await callClaude(PROMPTS.storyExtract(profile), `Resume:\n${base}`, 2000);
+      const raw = await callClaudeLong(PROMPTS.storyExtract(profile), `Resume:\n${base}`, 2000);
       let parsed = [];
       try { parsed = JSON.parse(raw.match(/\[.*\]/s)?.[0] || "[]"); } catch {}
       const newStories = parsed.map(s => ({ ...s, id: s.id || generateId() }));

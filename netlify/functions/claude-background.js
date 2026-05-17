@@ -128,6 +128,27 @@ exports.handler = async (event, context) => {
       clearTimeout(fetchTimeout);
     }
 
+    // Retry once on 429 rate limit — wait for Retry-After header or default 15s
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('retry-after') || '15', 10);
+      console.log(`[bg] 429 rate limited, retrying after ${retryAfter}s`);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      const res2 = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      const data2 = await res2.json();
+      console.log('[bg] retry responded, status:', res2.status);
+      await store.set(key, JSON.stringify({ ok: res2.ok, statusCode: res2.status, data: data2 }));
+      console.log('[bg] retry result written to Blobs');
+      return;
+    }
+
     const data = await res.json();
     console.log('[bg] Anthropic responded, status:', res.status);
     await store.set(key, JSON.stringify({ ok: res.ok, statusCode: res.status, data }));
